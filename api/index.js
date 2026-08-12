@@ -1,7 +1,21 @@
-const { Bot, webhookCallback, InlineKeyboard } = require("grammy");
+const { Bot, webhookCallback, InlineKeyboard, InputFile } = require("grammy");
 const { Redis } = require("@upstash/redis");
 
-// 1️⃣ إعداد قاعدة البيانات Upstash Redis
+// 1️⃣ قراءة متغيرات البيئة بأسماؤها الصحيحة الكاملة
+const token = process.env.TELEGRAM_BOT_TOKEN;
+
+if (!token) {
+  console.error("❌ خطأ: لم يتم العثور على TELEGRAM_BOT_TOKEN في Environment Variables!");
+}
+
+const bot = new Bot(token || "DUMMY_TOKEN");
+
+// معالج الأخطاء العالمي لمنع انهيار Serverless Function
+bot.catch((err) => {
+  console.error("❌ حدث خطأ أثناء تنفيذ الطلب:", err.error || err);
+});
+
+// 2️⃣ إعداد قاعدة البيانات Upstash Redis
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
     ? new Redis({
@@ -28,7 +42,7 @@ async function getCache(key) {
   return memoryCache.get(key);
 }
 
-// 2️⃣ القواميس والبيانات الأساسية (الكلمات المسيئة، الردود الذكية، والاقتباسات)
+// 3️⃣ القواميس والبيانات الأساسية (الكلمات المسيئة، الردود الذكية، والاقتباسات)
 const badWords = ["كحبة", "مطي", "قندرة", "ساقط", "فرخ", "عير", "كس", "طيز", "زنيّم"];
 
 const smartAnswers = {
@@ -135,7 +149,7 @@ function t(lang, key) {
   return i18n[l][key] || key;
 }
 
-// 3️⃣ محرك الترجمة الفورية عبر Google Translate API
+// 4️⃣ محرك الترجمة الفورية عبر Google Translate API
 async function translateText(text, targetLang) {
   if (!text || !text.trim()) return { text: "", detectedLang: "" };
   try {
@@ -155,9 +169,6 @@ async function translateText(text, targetLang) {
   }
 }
 
-const token = process.env.TELEGRAM_BOT_TOKEN;
-const bot = new Bot(token);
-
 async function getAdminConfig(adminId) {
   const cfg = await getCache(`config:${adminId}`);
   return cfg || { isStopped: false, autoReply: "", excluded: [], state: "", lang: "ar", businessConnId: "" };
@@ -172,48 +183,25 @@ function getNerdChannelKeyboard() {
   return new InlineKeyboard().url("تحديثات نيرد 📢", "https://t.me/Xhwe2");
 }
 
-// دالة نشر القصص عبر API
-async function postBusinessStory(bizConnId, fileId, mediaType, activePeriod, duration = 0) {
+// دالة نشر القصص عبر API باستعمال InputFile
+async function postBusinessStory(bizConnId, fileId, mediaType, activePeriod) {
   const fileInfo = await bot.api.getFile(fileId);
   const fileUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
-  const res = await fetch(fileUrl);
-  const buffer = await res.arrayBuffer();
+  const inputFile = new InputFile({ url: fileUrl });
 
-  const formData = new FormData();
-  formData.append("business_connection_id", bizConnId);
-  formData.append("active_period", activePeriod.toString());
-
-  const contentJSON = mediaType === "video"
-    ? JSON.stringify({ type: "video", video: "attach://media", duration })
-    : JSON.stringify({ type: "photo", photo: "attach://media" });
-
-  formData.append("content", contentJSON);
-  formData.append("media", new Blob([buffer]), mediaType === "video" ? "story.mp4" : "story.jpg");
-
-  const apiRes = await fetch(`https://api.telegram.org/bot${token}/postStory`, {
-    method: "POST",
-    body: formData,
-  });
-  return await apiRes.json();
-}
-
-// دالة تحديث صورة البروفايل عبر API
-async function setBusinessProfilePhoto(bizConnId, fileId) {
-  const fileInfo = await bot.api.getFile(fileId);
-  const fileUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
-  const res = await fetch(fileUrl);
-  const buffer = await res.arrayBuffer();
-
-  const formData = new FormData();
-  formData.append("business_connection_id", bizConnId);
-  formData.append("photo", JSON.stringify({ type: "static", photo: "attach://photo_file" }));
-  formData.append("photo_file", new Blob([buffer]), "profile.jpg");
-
-  const apiRes = await fetch(`https://api.telegram.org/bot${token}/setBusinessAccountProfilePhoto`, {
-    method: "POST",
-    body: formData,
-  });
-  return await apiRes.json();
+  if (mediaType === "photo") {
+    return await bot.api.raw.postStory({
+      business_connection_id: bizConnId,
+      content: { type: "photo", photo: inputFile },
+      active_period: activePeriod,
+    });
+  } else {
+    return await bot.api.raw.postStory({
+      business_connection_id: bizConnId,
+      content: { type: "video", video: inputFile },
+      active_period: activePeriod,
+    });
+  }
 }
 
 // استخراج وسائط الرسائل
@@ -259,7 +247,7 @@ function extractMediaInfo(msg) {
   return info;
 }
 
-// إعادة إرسال الوسائط للأدمن عند الحذف أو النسخ الاحتياطي
+// إعادة إرسال الوسائط للأدمن
 async function sendMediaToAdmin(adminId, media, headerText) {
   const caption = `${headerText}\n\n` + (media.caption ? `💬 الشرح: ${media.caption}` : "");
   try {
@@ -331,7 +319,7 @@ function getBackKeyboard(lang) {
   return new InlineKeyboard().text(t(lang, "back_btn"), "menu_main");
 }
 
-// 4️⃣ الإشراف التلقائي، منع السبام، والردود في المجموعات (Group Moderation)
+// 5️⃣ الإشراف التلقائي، منع السبام، والردود في المجموعات (Group Moderation)
 bot.on(["message:group", "message:supergroup"], async (ctx) => {
   const messageText = ctx.message.text || ctx.message.caption || "";
   const chatId = ctx.chat.id;
@@ -385,7 +373,7 @@ bot.on(["message:group", "message:supergroup"], async (ctx) => {
   }
 });
 
-// 5️⃣ أوامر وتفاعلات لوحة التحكم للأدمن في الخاص
+// 6️⃣ أوامر وتفاعلات لوحة التحكم للأدمن في الخاص
 bot.command("start", async (ctx) => {
   if (ctx.chat.type !== "private") return;
   const cfg = await getAdminConfig(ctx.from.id);
@@ -559,13 +547,6 @@ bot.on("message", async (ctx, next) => {
           business_connection_id: cfg.businessConnId,
           username: ctx.message.text.trim().replace("@", ""),
         });
-      } else if (field === "photo") {
-        if (!ctx.message.photo) {
-          await ctx.reply("❌ أرسل صورة لتحديث صورة الملف الشخصي.");
-          return;
-        }
-        const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
-        await setBusinessProfilePhoto(cfg.businessConnId, fileId);
       }
       cfg.state = "";
       await saveAdminConfig(adminId, cfg);
@@ -594,7 +575,7 @@ bot.on("message", async (ctx, next) => {
           await ctx.reply("❌ الفيديو أطول من 60 ثانية.");
           return;
         }
-        await postBusinessStory(cfg.businessConnId, video.file_id, "video", activePeriod, video.duration);
+        await postBusinessStory(cfg.businessConnId, video.file_id, "video", activePeriod);
       }
       cfg.state = "";
       await saveAdminConfig(adminId, cfg);
@@ -607,7 +588,7 @@ bot.on("message", async (ctx, next) => {
   }
 });
 
-// 6️⃣ التعامل مع البوتات المُدارة (Managed Bots)
+// 7️⃣ التعامل مع البوتات المُدارة (Managed Bots)
 bot.on("managed_bot", async (ctx) => {
   const mb = ctx.update.managed_bot;
   try {
@@ -626,7 +607,7 @@ bot.on("managed_bot", async (ctx) => {
   }
 });
 
-// 7️⃣ ربط الحساب التجاري
+// 8️⃣ ربط الحساب التجاري
 bot.on("business_connection", async (ctx) => {
   const bc = ctx.update.business_connection;
   if (bc.is_enabled && bc.user_chat_id) {
@@ -646,7 +627,7 @@ bot.on("business_connection", async (ctx) => {
   }
 });
 
-// 8️⃣ الرد الخاص في محادثات العملاء والتراسل التجاري (Business Message)
+// 9️⃣ الرد الخاص في محادثات العملاء والتراسل التجاري (Business Message)
 bot.on("business_message", async (ctx) => {
   const msg = ctx.update.business_message;
   const connId = msg.business_connection_id;
@@ -671,7 +652,7 @@ bot.on("business_message", async (ctx) => {
   }
 
   // تجنب الرد التلقائي على الرسائل الصادرة أو عند الإيقاف
-  if (msg.is_outgoing || cfg.isStopped || cfg.excluded.includes(msg.from.id)) {
+  if (msg.is_outgoing || cfg.isStopped || (cfg.excluded && cfg.excluded.includes(msg.from.id))) {
     return;
   }
 
@@ -709,7 +690,7 @@ bot.on("business_message", async (ctx) => {
   });
 });
 
-// 9️⃣ كشف واسترجاع المحذوفات للأدمن
+// 🔟 كشف واسترجاع المحذوفات للأدمن
 bot.on("deleted_business_messages", async (ctx) => {
   const dbm = ctx.update.deleted_business_messages;
   const adminId = await getCache(`conn:${dbm.business_connection_id}`);
