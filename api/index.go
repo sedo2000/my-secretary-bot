@@ -73,7 +73,7 @@ var translations = map[string]map[string]string{
 		"edit_username_btn":       "🔗 تعديل اليوزر",
 		"no_business_connection":  "❌ لم يتم ربط حساب تجاري بعد بالبوت.",
 		"first_name_prompt":       "✏️ أرسل الآن الاسم الأول الجديد (والاسم الأخير بعده بمسافة، اختياري):",
-		"bio_prompt":              "📝 أرسل الآن النبذة الجديدة (حد أقصى 140 حرف):",
+		"bio_prompt":              "📝 أرسل الآن النبذة الجديدة (حد أقصى 70 حرف):",
 		"username_prompt":         "🔗 أرسل الآن اسم المستخدم الجديد (بدون @):",
 		"photo_prompt":            "🖼️ أرسل الآن الصورة الجديدة لملفك الشخصي:",
 		"name_updated":            "✅ تم تعديل الاسم بنجاح!",
@@ -128,7 +128,7 @@ var translations = map[string]map[string]string{
 		"edit_username_btn":       "🔗 Edit Username",
 		"no_business_connection":  "❌ No business account connected to the bot yet.",
 		"first_name_prompt":       "✏️ Send the new first name now (optionally followed by a last name):",
-		"bio_prompt":              "📝 Send the new bio now (max 140 characters):",
+		"bio_prompt":              "📝 Send the new bio now (max 70 characters):",
 		"username_prompt":         "🔗 Send the new username now (without @):",
 		"photo_prompt":            "🖼️ Send the new profile photo now:",
 		"name_updated":            "✅ Name updated successfully!",
@@ -509,7 +509,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				sendMenu(botToken, chatID, lang, tr(lang, "name_updated"))
 			}
 		} else if config.State == "waiting_bio" {
-			if err := setBusinessAccountBio(botToken, config.BusinessConnID, msg.Text); err != nil {
+			if len([]rune(msg.Text)) > 70 {
+				sendSubMenu(botToken, chatID, lang, "❌ النبذة طويلة جداً! الحد الأقصى المسموح به من تيليجرام هو 70 حرفاً فقط.\nأرسل نبذة أقصر:")
+			} else if err := setBusinessAccountBio(botToken, config.BusinessConnID, msg.Text); err != nil {
 				sendSubMenu(botToken, chatID, lang, fmt.Sprintf(tr(lang, "fail_bio"), err.Error()))
 			} else {
 				config.State = ""
@@ -788,16 +790,35 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 	}
 }
 
+// دوال إنشاء القوائم والأزرار مع تطبيق الألوان (Danger: أحمر, Success: أخضر, Primary: أزرق)
+
 func sendMenu(token string, chatID int64, lang, text string) {
 	keyboard := map[string]interface{}{
-		"inline_keyboard": [][]map[string]string{
-			{{"text": tr(lang, "stop_btn"), "callback_data": "stop"}, {"text": tr(lang, "start_btn"), "callback_data": "start"}},
-			{{"text": tr(lang, "edit_text_btn"), "callback_data": "edit_text"}},
-			{{"text": tr(lang, "exclude_btn"), "callback_data": "exclude"}, {"text": tr(lang, "list_excluded_btn"), "callback_data": "list_excluded"}},
-			{{"text": tr(lang, "clear_excluded_btn"), "callback_data": "clear_excluded"}},
-			{{"text": tr(lang, "profile_menu_btn"), "callback_data": "profile_menu"}},
-			{{"text": tr(lang, "post_story_btn"), "callback_data": "post_story"}},
-			{{"text": tr(lang, "lang_ar_btn"), "callback_data": "lang_ar"}, {"text": tr(lang, "lang_en_btn"), "callback_data": "lang_en"}},
+		"inline_keyboard": [][]map[string]interface{}{
+			{
+				{"text": tr(lang, "stop_btn"), "callback_data": "stop", "style": "danger"},
+				{"text": tr(lang, "start_btn"), "callback_data": "start", "style": "success"},
+			},
+			{
+				{"text": tr(lang, "edit_text_btn"), "callback_data": "edit_text", "style": "primary"},
+			},
+			{
+				{"text": tr(lang, "exclude_btn"), "callback_data": "exclude", "style": "primary"},
+				{"text": tr(lang, "list_excluded_btn"), "callback_data": "list_excluded", "style": "primary"},
+			},
+			{
+				{"text": tr(lang, "clear_excluded_btn"), "callback_data": "clear_excluded", "style": "danger"},
+			},
+			{
+				{"text": tr(lang, "profile_menu_btn"), "callback_data": "profile_menu", "style": "primary"},
+			},
+			{
+				{"text": tr(lang, "post_story_btn"), "callback_data": "post_story", "style": "primary"},
+			},
+			{
+				{"text": tr(lang, "lang_ar_btn"), "callback_data": "lang_ar", "style": "primary"},
+				{"text": tr(lang, "lang_en_btn"), "callback_data": "lang_en", "style": "primary"},
+			},
 		},
 	}
 
@@ -815,10 +836,18 @@ func sendMenu(token string, chatID int64, lang, text string) {
 
 func sendStoryDurationMenu(token string, chatID int64, lang string) {
 	keyboard := map[string]interface{}{
-		"inline_keyboard": [][]map[string]string{
-			{{"text": "⏱️ " + tr(lang, "dur_6h"), "callback_data": "story_dur_21600"}, {"text": "⏱️ " + tr(lang, "dur_12h"), "callback_data": "story_dur_43200"}},
-			{{"text": "⏱️ " + tr(lang, "dur_24h"), "callback_data": "story_dur_86400"}, {"text": "⏱️ " + tr(lang, "dur_48h"), "callback_data": "story_dur_172800"}},
-			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu"}},
+		"inline_keyboard": [][]map[string]interface{}{
+			{
+				{"text": "⏱️ " + tr(lang, "dur_6h"), "callback_data": "story_dur_21600", "style": "primary"},
+				{"text": "⏱️ " + tr(lang, "dur_12h"), "callback_data": "story_dur_43200", "style": "primary"},
+			},
+			{
+				{"text": "⏱️ " + tr(lang, "dur_24h"), "callback_data": "story_dur_86400", "style": "primary"},
+				{"text": "⏱️ " + tr(lang, "dur_48h"), "callback_data": "story_dur_172800", "style": "primary"},
+			},
+			{
+				{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"},
+			},
 		},
 	}
 
@@ -836,12 +865,12 @@ func sendStoryDurationMenu(token string, chatID int64, lang string) {
 
 func sendProfileMenu(token string, chatID int64, lang, text string) {
 	keyboard := map[string]interface{}{
-		"inline_keyboard": [][]map[string]string{
-			{{"text": tr(lang, "edit_first_name_btn"), "callback_data": "edit_first_name"}},
-			{{"text": tr(lang, "edit_bio_btn"), "callback_data": "edit_bio"}},
-			{{"text": tr(lang, "edit_photo_btn"), "callback_data": "edit_photo"}},
-			{{"text": tr(lang, "edit_username_btn"), "callback_data": "edit_username"}},
-			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu"}},
+		"inline_keyboard": [][]map[string]interface{}{
+			{{"text": tr(lang, "edit_first_name_btn"), "callback_data": "edit_first_name", "style": "primary"}},
+			{{"text": tr(lang, "edit_bio_btn"), "callback_data": "edit_bio", "style": "primary"}},
+			{{"text": tr(lang, "edit_photo_btn"), "callback_data": "edit_photo", "style": "primary"}},
+			{{"text": tr(lang, "edit_username_btn"), "callback_data": "edit_username", "style": "primary"}},
+			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"}},
 		},
 	}
 
@@ -859,8 +888,8 @@ func sendProfileMenu(token string, chatID int64, lang, text string) {
 
 func sendSubMenu(token string, chatID int64, lang, text string) {
 	keyboard := map[string]interface{}{
-		"inline_keyboard": [][]map[string]string{
-			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu"}},
+		"inline_keyboard": [][]map[string]interface{}{
+			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"}},
 		},
 	}
 
@@ -892,8 +921,8 @@ func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID st
 	initialQuote := quotes[rand.Intn(len(quotes))]
 
 	keyboard := map[string]interface{}{
-		"inline_keyboard": [][]map[string]string{
-			{{"text": "✨ " + initialQuote, "callback_data": "change_quote"}},
+		"inline_keyboard": [][]map[string]interface{}{
+			{{"text": "✨ " + initialQuote, "callback_data": "change_quote", "style": "primary"}},
 		},
 	}
 
@@ -911,8 +940,8 @@ func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID st
 
 func updateButtonQuote(token string, chatID int64, msgID int, newQuote string) {
 	keyboard := map[string]interface{}{
-		"inline_keyboard": [][]map[string]string{
-			{{"text": "✨ " + newQuote, "callback_data": "change_quote"}},
+		"inline_keyboard": [][]map[string]interface{}{
+			{{"text": "✨ " + newQuote, "callback_data": "change_quote", "style": "primary"}},
 		},
 	}
 
@@ -1115,7 +1144,7 @@ func setBusinessAccountProfilePhoto(token, businessConnID, fileID string) error 
 		return err
 	}
 
-	photoJSON := `{"type":"static","photo":"attach://photo"}`
+,	photoJSON := `{"type":"static","photo":"attach://photo"}`
 	fields := map[string]string{
 		"business_connection_id": businessConnID,
 		"photo":                  photoJSON,
