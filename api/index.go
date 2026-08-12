@@ -178,50 +178,10 @@ func getDurationLabel(lang, period string) string {
 	}
 }
 
-// دالة الترجمة الفورية والكشف التلقائي عن لغة النص
+// دالة الترجمة الفورية تم تعطيل وظيفتها (إيقاف ميزة الترجمة التلقائية)
 func translateText(text, targetLang string) (string, string, error) {
-	if strings.TrimSpace(text) == "" {
-		return "", "", nil
-	}
-	endpoint := fmt.Sprintf(
-		"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=%s&dt=t&q=%s",
-		targetLang, url.QueryEscape(text),
-	)
-
-	resp, err := httpClient.Get(endpoint)
-	if err != nil {
-		return "", "", err
-	}
-	defer resp.Body.Close()
-
-	var result []interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", "", err
-	}
-
-	if len(result) == 0 {
-		return "", "", fmt.Errorf("فشل الترجمة")
-	}
-
-	translatedText := ""
-	if sentences, ok := result[0].([]interface{}); ok {
-		for _, sentence := range sentences {
-			if s, ok := sentence.([]interface{}); ok && len(s) > 0 {
-				if tText, ok := s[0].(string); ok {
-					translatedText += tText
-				}
-			}
-		}
-	}
-
-	detectedLang := ""
-	if len(result) > 2 {
-		if lang, ok := result[2].(string); ok {
-			detectedLang = lang
-		}
-	}
-
-	return translatedText, detectedLang, nil
+	// إيقاف وظيفة الترجمة
+	return "", "", fmt.Errorf("الترجمة معطلة حالياً")
 }
 
 type BotConfig struct {
@@ -241,6 +201,7 @@ type InlineKeyboardButton struct {
 	Text         string          `json:"text"`
 	CallbackData string          `json:"callback_data,omitempty"`
 	CopyText     *CopyTextButton `json:"copy_text,omitempty"`
+	Style        string          `json:"style,omitempty"`
 }
 
 type SharedUser struct {
@@ -623,85 +584,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	// 3. معالجة رسائل العملاء (Business Messages)
 	if update.BusinessMessage != nil {
-		msg := update.BusinessMessage
-
-		if msg.IsOutgoing {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		trimmedText := strings.TrimSpace(msg.Text)
-
-		// تجاهل كل أمر يبدأ بـ / في محادثات البزنس لمنع التداخل والتكرار
-		if strings.HasPrefix(trimmedText, "/") {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		adminID := getAdminIDFromBusinessConn(botToken, msg.BusinessConnectionID)
-		if adminID == 0 {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		senderID := msg.From.ID
-		customerChatID := msg.Chat.ID
-
-		if senderID == adminID || customerChatID == adminID {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		config, _ := getConfig(botToken, adminID)
-
-		if config.IsStopped {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		for _, exID := range config.Excluded {
-			if exID == senderID || exID == customerChatID {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-		}
-
-		customerName := msg.From.FirstName
-		if customerName == "" {
-			customerName = "صديقي"
-		}
-
-		var detectedLang string
-		if len(trimmedText) > 3 {
-			translatedToAr, dLang, err := translateText(trimmedText, "ar")
-			if err == nil && dLang != "" {
-				detectedLang = dLang
-				if detectedLang != "ar" && detectedLang != "und" && adminID != 0 {
-					notifyMsg := fmt.Sprintf(
-						"🌐 *رسالة جديدة بلغة مترجمة (`%s`)*\n👤 *العميل:* %s (`%d`)\n\n💬 *النص الأصلي:*\n%s\n\n✨ *الترجمة للعربية:*\n%s",
-						detectedLang, customerName, senderID, trimmedText, translatedToAr,
-					)
-					sendMessage(botToken, adminID, notifyMsg)
-				}
-			}
-		}
-
-		var replyText string
-		if config.AutoReply == "" {
-			replyText = "أهلاً بك يا " + customerName + " 🌸\nأنا غير متوفر الآن، اترك رسالتك وسأرد عليك قريباً."
-		} else {
-			replyText = config.AutoReply
-			replyText = strings.ReplaceAll(replyText, "{name}", customerName)
-			replyText = strings.ReplaceAll(replyText, "{الاسم}", customerName)
-		}
-
-		if detectedLang != "" && detectedLang != "ar" && detectedLang != "und" {
-			if translatedReply, _, err := translateText(replyText, detectedLang); err == nil && translatedReply != "" {
-				replyText = translatedReply
-			}
-		}
-
-		sendBusinessReplyWithQuoteButton(botToken, customerChatID, replyText, msg.BusinessConnectionID)
+		// [تعديل] تم إيقاف الرد التلقائي بشكل كامل: تجاهل جميع رسائل العملاء وإنهاء العملية.
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -890,7 +773,7 @@ func sendUserReplyKeyboard(token string, chatID int64) {
 	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
-// دالة إرسال الـ ID بزر النسخ الشفاف التفاعلي
+// دالة إرسال الـ ID بزر النسخ الشفاف التفاعلي الملون
 func sendIDMessage(token string, chatID int64, userID int64, lang string) {
 	idStr := strconv.FormatInt(userID, 10)
 	msgText := fmt.Sprintf(tr(lang, "your_id_msg"), userID)
@@ -899,8 +782,9 @@ func sendIDMessage(token string, chatID int64, userID int64, lang string) {
 		"inline_keyboard": [][]InlineKeyboardButton{
 			{
 				{
-					Text:     fmt.Sprintf("📋 Copy ID%s", idStr),
+					Text:     fmt.Sprintf("📋 Copy ID: %s", idStr),
 					CopyText: &CopyTextButton{Text: idStr},
+					Style:    "primary", // زر أزرق
 				},
 			},
 		},
@@ -922,12 +806,13 @@ func sendSubMenuWithIDCopy(token string, chatID int64, lang, text string, userID
 		"inline_keyboard": [][]InlineKeyboardButton{
 			{
 				{
-					Text:     fmt.Sprintf("📋 Copy ID%s", idStr),
+					Text:     fmt.Sprintf("📋 Copy ID: %s", idStr),
 					CopyText: &CopyTextButton{Text: idStr},
+					Style:    "primary", // زر أزرق
 				},
 			},
 			{
-				{Text: tr(lang, "back_btn"), CallbackData: "main_menu"},
+				{Text: tr(lang, "back_btn"), CallbackData: "main_menu", Style: "danger"}, // زر أحمر للرجوع
 			},
 		},
 	}
@@ -942,32 +827,33 @@ func sendSubMenuWithIDCopy(token string, chatID int64, lang, text string, userID
 	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
+// دالة لتوليد أزرار القائمة الرئيسية الملونة
 func getMainMenuKeyboard(lang string) map[string]interface{} {
 	return map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
 			{
-				{"text": tr(lang, "stop_btn"), "callback_data": "stop"},
-				{"text": tr(lang, "start_btn"), "callback_data": "start"},
+				{"text": tr(lang, "stop_btn"), "callback_data": "stop", "style": "danger"}, // أحمر
+				{"text": tr(lang, "start_btn"), "callback_data": "start", "style": "success"}, // أخضر
 			},
 			{
-				{"text": tr(lang, "edit_text_btn"), "callback_data": "edit_text"},
+				{"text": tr(lang, "edit_text_btn"), "callback_data": "edit_text", "style": "primary"}, // أزرق
 			},
 			{
-				{"text": tr(lang, "exclude_btn"), "callback_data": "exclude"},
-				{"text": tr(lang, "list_excluded_btn"), "callback_data": "list_excluded"},
+				{"text": tr(lang, "exclude_btn"), "callback_data": "exclude", "style": "primary"}, // أزرق
+				{"text": tr(lang, "list_excluded_btn"), "callback_data": "list_excluded", "style": "primary"}, // أزرق
 			},
 			{
-				{"text": tr(lang, "clear_excluded_btn"), "callback_data": "clear_excluded"},
+				{"text": tr(lang, "clear_excluded_btn"), "callback_data": "clear_excluded", "style": "danger"}, // أحمر
 			},
 			{
-				{"text": tr(lang, "profile_menu_btn"), "callback_data": "profile_menu"},
+				{"text": tr(lang, "profile_menu_btn"), "callback_data": "profile_menu", "style": "primary"}, // أزرق
 			},
 			{
-				{"text": tr(lang, "post_story_btn"), "callback_data": "post_story"},
+				{"text": tr(lang, "post_story_btn"), "callback_data": "post_story", "style": "primary"}, // أزرق
 			},
 			{
-				{"text": tr(lang, "lang_ar_btn"), "callback_data": "lang_ar"},
-				{"text": tr(lang, "lang_en_btn"), "callback_data": "lang_en"},
+				{"text": tr(lang, "lang_ar_btn"), "callback_data": "lang_ar", "style": "primary"}, // أزرق
+				{"text": tr(lang, "lang_en_btn"), "callback_data": "lang_en", "style": "primary"}, // أزرق
 			},
 		},
 	}
@@ -990,15 +876,15 @@ func sendStoryDurationMenu(token string, chatID int64, lang string) {
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
 			{
-				{"text": "⏱️ " + tr(lang, "dur_6h"), "callback_data": "story_dur_21600"},
-				{"text": "⏱️ " + tr(lang, "dur_12h"), "callback_data": "story_dur_43200"},
+				{"text": "⏱️ " + tr(lang, "dur_6h"), "callback_data": "story_dur_21600", "style": "primary"}, // أزرق
+				{"text": "⏱️ " + tr(lang, "dur_12h"), "callback_data": "story_dur_43200", "style": "primary"}, // أزرق
 			},
 			{
-				{"text": "⏱️ " + tr(lang, "dur_24h"), "callback_data": "story_dur_86400"},
-				{"text": "⏱️ " + tr(lang, "dur_48h"), "callback_data": "story_dur_172800"},
+				{"text": "⏱️ " + tr(lang, "dur_24h"), "callback_data": "story_dur_86400", "style": "primary"}, // أزرق
+				{"text": "⏱️ " + tr(lang, "dur_48h"), "callback_data": "story_dur_172800", "style": "primary"}, // أزرق
 			},
 			{
-				{"text": tr(lang, "back_btn"), "callback_data": "main_menu"},
+				{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"}, // أحمر
 			},
 		},
 	}
@@ -1016,11 +902,11 @@ func sendStoryDurationMenu(token string, chatID int64, lang string) {
 func sendProfileMenu(token string, chatID int64, lang, text string) {
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": tr(lang, "edit_first_name_btn"), "callback_data": "edit_first_name"}},
-			{{"text": tr(lang, "edit_bio_btn"), "callback_data": "edit_bio"}},
-			{{"text": tr(lang, "edit_photo_btn"), "callback_data": "edit_photo"}},
-			{{"text": tr(lang, "edit_username_btn"), "callback_data": "edit_username"}},
-			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu"}},
+			{{"text": tr(lang, "edit_first_name_btn"), "callback_data": "edit_first_name", "style": "primary"}}, // أزرق
+			{{"text": tr(lang, "edit_bio_btn"), "callback_data": "edit_bio", "style": "primary"}}, // أزرق
+			{{"text": tr(lang, "edit_photo_btn"), "callback_data": "edit_photo", "style": "primary"}}, // أزرق
+			{{"text": tr(lang, "edit_username_btn"), "callback_data": "edit_username", "style": "primary"}}, // أزرق
+			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"}}, // أحمر
 		},
 	}
 
@@ -1037,7 +923,7 @@ func sendProfileMenu(token string, chatID int64, lang, text string) {
 func sendSubMenu(token string, chatID int64, lang, text string) {
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu"}},
+			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"}}, // أحمر
 		},
 	}
 
@@ -1066,7 +952,7 @@ func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID st
 
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "✨ " + initialQuote, "callback_data": "change_quote"}},
+			{{"text": "✨ " + initialQuote, "callback_data": "change_quote", "style": "primary"}}, // أزرق
 		},
 	}
 
@@ -1083,7 +969,7 @@ func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID st
 func updateButtonQuote(token string, chatID int64, msgID int, newQuote string) {
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "✨ " + newQuote, "callback_data": "change_quote"}},
+			{{"text": "✨ " + newQuote, "callback_data": "change_quote", "style": "primary"}}, // أزرق
 		},
 	}
 
