@@ -1124,18 +1124,7 @@ func postMultipartBusinessAPI(token, method string, fields map[string]string, fi
 	return nil
 }
 
-func setBusinessAccountProfilePhoto(token, businessConnID, fileID string) error {
-	data, err := downloadFileFromTelegram(token, fileID)
-	if err != nil {
-		return err
-	}
-	fields := map[string]string{
-		"business_connection_id": businessConnID,
-	}
-	return postMultipartBusinessAPI(token, "setBusinessAccountProfilePhoto", fields, "photo", "profile.jpg", data)
-}
-
-// تم تحديث الدالة لتدعم استقبال مصفوفة الايديات المستثناة وإضافتها لقواعد الخصوصية
+// تم تحديث الدالة لتدعم استقبال مصفوفة الايديات المستثناة وإضافتها لقواعد الخصوصية وإصلاح حقل attach://
 func postBusinessStory(token, businessConnID, mediaType, fileID string, durationSeconds int, activePeriod string, lang string, excludedIDs []int64) error {
 	if mediaType == "video" && durationSeconds > 60 {
 		return fmt.Errorf(tr(lang, "video_too_long_error"))
@@ -1146,18 +1135,20 @@ func postBusinessStory(token, businessConnID, mediaType, fileID string, duration
 		return err
 	}
 
-	fileName := "story.jpg"
-	contentMap := map[string]interface{}{
-		"type": "photo",
-	}
+	var contentJSON, fileName string
 
+	// تجهيز الـ JSON الخاص بالمحتوى مع الإشارة لاسم الحقل المرفق "content"
 	if mediaType == "video" {
 		fileName = "story.mp4"
-		contentMap["type"] = "video"
+		if durationSeconds > 0 {
+			contentJSON = fmt.Sprintf(`{"type":"video","video":"attach://content","duration":%d}`, durationSeconds)
+		} else {
+			contentJSON = `{"type":"video","video":"attach://content"}`
+		}
+	} else {
+		fileName = "story.jpg"
+		contentJSON = `{"type":"photo","photo":"attach://content"}`
 	}
-
-	contentBytes, _ := json.Marshal(contentMap)
-	contentJSON := string(contentBytes)
 
 	fields := map[string]string{
 		"business_connection_id": businessConnID,
