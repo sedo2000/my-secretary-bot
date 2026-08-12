@@ -1,11 +1,12 @@
 {
   "name": "telegram-business-bot",
-  "version": "1.0.0",
-  "description": "نظام متكامل لإدارة الحسابات التجارية على تليجرام",
+  "version": "2.0.0",
+  "description": "نظام متكامل لإدارة الحسابات التجارية على تليجرام مع ترجمة مجانية",
   "main": "api/index.js",
   "scripts": {
     "start": "node api/index.js",
-    "dev": "nodemon api/index.js"
+    "dev": "nodemon api/index.js",
+    "webhook": "node scripts/setup-webhook.js"
   },
   "dependencies": {
     "grammy": "^1.21.1",
@@ -14,9 +15,19 @@
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "@grammyjs/types": "^3.5.0",
-    "google-translate-api-x": "^10.9.0"
+    "@vitalets/google-translate-api": "^9.2.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
-  }
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "business",
+    "translation",
+    "auto-reply",
+    "moderation"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
 }
