@@ -1124,7 +1124,8 @@ func postMultipartBusinessAPI(token, method string, fields map[string]string, fi
 	return nil
 }
 
-// تم تحديث الدالة لتدعم استقبال مصفوفة الايديات المستثناة وإضافتها لقواعد الخصوصية وإصلاح حقل attach://
+// تم تحديث الدالة لتدعم استقبال مصفوفة الايديات المستثناة وإضافتها لقواعد الخصوصية 
+// تم تحديث الدالة لفصل اسم حقل الملف المرفق عن حقل content لمنع التعارض مع Telegram API
 func postBusinessStory(token, businessConnID, mediaType, fileID string, durationSeconds int, activePeriod string, lang string, excludedIDs []int64) error {
 	if mediaType == "video" && durationSeconds > 60 {
 		return fmt.Errorf(tr(lang, "video_too_long_error"))
@@ -1135,28 +1136,31 @@ func postBusinessStory(token, businessConnID, mediaType, fileID string, duration
 		return err
 	}
 
-	var contentJSON, fileName string
+	var contentJSON, fileName, fileFieldName string
 
-	// تجهيز الـ JSON الخاص بالمحتوى مع الإشارة لاسم الحقل المرفق "content"
+	// تحديد اسم حقل المرفق بشكل منفصل (photo للصور و video للفيديوهات)
 	if mediaType == "video" {
 		fileName = "story.mp4"
+		fileFieldName = "video"
 		if durationSeconds > 0 {
-			contentJSON = fmt.Sprintf(`{"type":"video","video":"attach://content","duration":%d}`, durationSeconds)
+			contentJSON = fmt.Sprintf(`{"type":"video","video":"attach://%s","duration":%d}`, fileFieldName, durationSeconds)
 		} else {
-			contentJSON = `{"type":"video","video":"attach://content"}`
+			contentJSON = fmt.Sprintf(`{"type":"video","video":"attach://%s"}`, fileFieldName)
 		}
 	} else {
 		fileName = "story.jpg"
-		contentJSON = `{"type":"photo","photo":"attach://content"}`
+		fileFieldName = "photo"
+		contentJSON = fmt.Sprintf(`{"type":"photo","photo":"attach://%s"}`, fileFieldName)
 	}
 
+	// حقل content يحوي الـ JSON، بينما المرفق سيتم إرساله باسم fileFieldName
 	fields := map[string]string{
 		"business_connection_id": businessConnID,
 		"content":                contentJSON,
 		"active_period":          activePeriod,
 	}
 
-	// إضافة قواعد الخصوصية (Privacy Rules) إذا كانت قائمة الاستثناءات تحتوي على ايديات
+	// إضافة قواعد الخصوصية (Privacy Rules) إذا كانت قائمة الاستثناءات تحتوي على أيدي
 	if len(excludedIDs) > 0 {
 		rules := []map[string]interface{}{
 			{"type": "allow_all"},
@@ -1166,5 +1170,5 @@ func postBusinessStory(token, businessConnID, mediaType, fileID string, duration
 		fields["privacy_rules"] = string(rulesBytes)
 	}
 
-	return postMultipartBusinessAPI(token, "postStory", fields, "content", fileName, data)
+	return postMultipartBusinessAPI(token, "postStory", fields, fileFieldName, fileName, data)
 }
