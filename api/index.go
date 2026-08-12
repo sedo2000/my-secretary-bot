@@ -258,6 +258,7 @@ type TelegramUpdate struct {
 		From struct {
 			ID        int64  `json:"id"`
 			FirstName string `json:"first_name"`
+			IsBot     bool   `json:"is_bot"`
 		} `json:"from"`
 		Text                 string `json:"text"`
 		IsOutgoing           bool   `json:"is_outgoing"`
@@ -618,10 +619,19 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	// 3. معالجة رسائل العملاء (Business Messages)
 	// هنا فقط -- وليس في أي مكان آخر -- يُستخدم نص الرد التلقائي (config.AutoReply).
+	// الرد التلقائي يعمل فقط بين العميل (المستخدم الحقيقي) وصاحب الحساب التجاري،
+	// ويتوقف فوراً في أي من الحالات التالية: زر الإيقاف مفعّل، المرسل مستثنى بالآيدي،
+	// المرسل بوت آخر، أو المرسل هو صاحب الحساب نفسه (رسالة ذاتية).
 	if update.BusinessMessage != nil {
 		msg := update.BusinessMessage
 
 		if msg.IsOutgoing {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// لا يعمل الرد التلقائي مطلقاً إذا كان المرسل بوتاً آخر (وليس عميلاً حقيقياً)
+		if msg.From.IsBot {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -632,15 +642,24 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		senderID := msg.From.ID
+		customerChatID := msg.Chat.ID
+
+		// لا يعمل الرد التلقائي إذا كانت الرسالة مرسلة من صاحب الحساب التجاري لنفسه
+		if senderID == adminID {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
 		config, _ := getConfig(botToken, adminID)
 
+		// 🛑 زر "إيقاف الرد": يوقف الرد التلقائي فوراً ولا يُكمل أي كود بعده
 		if config.IsStopped {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		senderID := msg.From.ID
-		customerChatID := msg.Chat.ID
+		// 👤 الاستثناء بالآيدي: يوقف الرد التلقائي لهذا الحساب تحديداً ولا يُكمل أي كود بعده
 		for _, exID := range config.Excluded {
 			if exID == senderID || exID == customerChatID {
 				w.WriteHeader(http.StatusOK)
