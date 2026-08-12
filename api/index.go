@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,6 +22,13 @@ var httpClient = &http.Client{Timeout: 8 * time.Second}
 
 // عميل بـ timeout أطول لعمليات تنزيل/رفع الصور والفيديوهات
 var mediaClient = &http.Client{Timeout: 30 * time.Second}
+
+// --- نظام الحماية من الحلقات التكرارية (Loop Prevention Safeguards) ---
+var (
+	lastMessagesMutex sync.Mutex
+	lastMessages      = make(map[int64]string)    // لتخزين أحدث نص رسالة لمنع التكرار (Deduplication)
+	lastReplyTime     = make(map[int64]time.Time) // للتحكم بمعدل التكرار (Rate Limiting)
+)
 
 // قائمة الاقتباسات
 var quotes = []string{
@@ -43,8 +51,8 @@ var quotes = []string{
 // --- قاموس الترجمة: عربي (افتراضي) وإنجليزي ---
 var translations = map[string]map[string]string{
 	"ar": {
-		"main_menu_title":         "القائمة الرئيسية 🤖:",
-		"welcome":                 "أهلاً بك في لوحة تحكم البوت 🤖\nاختر من الأزرار أدناه للتحكم الكامل:",
+		"main_menu_title":        "القائمة الرئيسية 🤖:",
+		"welcome":                "أهلاً بك في لوحة تحكم البوت 🤖\nاختر من الأزرار أدناه للتحكم الكامل:",
 		"stop_btn":                "🛑 إيقاف الرد",
 		"start_btn":               "🟢 تشغيل الرد",
 		"edit_text_btn":           "📝 تعديل نص الرد",
@@ -245,34 +253,37 @@ type BotConfig struct {
 	Lang           string  `json:"lang"`
 }
 
+type UserStruct struct {
+	ID        int64  `json:"id"`
+	IsBot     bool   `json:"is_bot"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Username  string `json:"username"`
+}
+
 type TelegramUpdate struct {
 	Message         *Message       `json:"message"`
 	CallbackQuery   *CallbackQuery `json:"callback_query"`
 	BusinessMessage *struct {
-		MessageID int `json:"message_id"`
-		Chat      struct {
-			ID int64 `json:"id"`
-		} `json:"chat"`
-		From struct {
-			ID        int64  `json:"id"`
-			FirstName string `json:"first_name"`
-		} `json:"from"`
-		Text                 string `json:"text"`
-		IsOutgoing           bool   `json:"is_outgoing"`
-		BusinessConnectionID string `json:"business_connection_id"`
+		MessageID            int        `json:"message_id"`
+		Chat                 struct { ID int64 `json:"id"` } `json:"chat"`
+		From                 UserStruct `json:"from"`
+		Text                 string     `json:"text"`
+		IsOutgoing           bool       `json:"is_outgoing"`
+		BusinessConnectionID string     `json:"business_connection_id"`
 	} `json:"business_message"`
 	BusinessConnection *struct {
-		ID   string `json:"id"`
-		User struct {
-			ID        int64  `json:"id"`
-			FirstName string `json:"first_name"`
-			LastName  string `json:"last_name"`
-			Username  string `json:"username"`
-		} `json:"user"`
-		UserChatID int64 `json:"user_chat_id"`
-		Date       int64 `json:"date"`
-		IsEnabled  bool  `json:"is_enabled"`
+		ID         string     `json:"id"`
+		User       UserStruct `json:"user"`
+		UserChatID int64      `json:"user_chat_id"`
+		Date       int64      `json:"date"`
+		IsEnabled  bool       `json:"is_enabled"`
 	} `json:"business_connection"`
+	// --- هيكل التحديث الخاص بميزة إدارة البوتات المصغرة (Managed Bots) ---
+	ManagedBot *struct {
+		User    UserStruct `json:"user"`
+		Creator UserStruct `json:"creator"`
+	} `json:"managed_bot"`
 }
 
 type PhotoSize struct {
@@ -293,30 +304,24 @@ type Message struct {
 	Chat      struct {
 		ID int64 `json:"id"`
 	} `json:"chat"`
-	From struct {
-		ID int64 `json:"id"`
-	} `json:"from"`
+	From  UserStruct  `json:"from"`
 	Text  string      `json:"text"`
 	Photo []PhotoSize `json:"photo"`
 	Video *Video      `json:"video"`
 }
 
 type CallbackQuery struct {
-	ID      string  `json:"id"`
-	Message Message `json:"message"`
-	Data    string  `json:"data"`
-	From    struct {
-		ID int64 `json:"id"`
-	} `json:"from"`
+	ID      string     `json:"id"`
+	Message Message    `json:"message"`
+	Data    string     `json:"data"`
+	From    UserStruct `json:"from"`
 }
 
 type BusinessConnectionResponse struct {
 	Ok     bool `json:"ok"`
 	Result struct {
-		User struct {
-			ID int64 `json:"id"`
-		} `json:"user"`
-		UserChatID int64 `json:"user_chat_id"`
+		User       UserStruct `json:"user"`
+		UserChatID int64      `json:"user_chat_id"`
 	} `json:"result"`
 }
 
@@ -339,6 +344,29 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	var update TelegramUpdate
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
 		log.Println("خطأ في قراءة التحديث:", err)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// ==========================================
+	// 0. استقبال التحديث عند إنشاء بوت جديد عبرك (Managed Bots)
+	// ==========================================
+	if update.ManagedBot != nil {
+		mb := update.ManagedBot
+		newBotUsername := mb.User.Username
+		creatorID := mb.Creator.ID
+
+		log.Printf("🤖 تم إنشاء بوت فرعي جديد: @%s بواسطة المستخدم ID: %d", newBotUsername, creatorID)
+
+		// جلب التوكن الخاص بالبوت الفرعي المدار
+		managedToken, err := getManagedBotToken(botToken, newBotUsername)
+		if err == nil && managedToken != "" {
+			notifyMsg := fmt.Sprintf("🎉 *تم إنشاء وبدء إدارة البوت الجديد بنجاح!*\n\n🤖 اسم البوت: @%s\n🆔 معرّف المنشئ: `%d`\n🔑 التوكن المحصول عليه جاهز للاستخدام.", newBotUsername, creatorID)
+			sendMessage(botToken, creatorID, notifyMsg)
+		} else {
+			log.Println("خطأ جلب Managed Bot Token:", err)
+		}
+
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -605,7 +633,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. معالجة رسائل العملاء (Business Messages) - بدون إرسال إشعارات مزعجة
+	// 3. معالجة رسائل العملاء (Business Messages) والتواصل بين البوتات بحماية الحلقة التكرارية
 	if update.BusinessMessage != nil {
 		msg := update.BusinessMessage
 
@@ -613,6 +641,33 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+
+		// --- تطبيق نظام الحماية من الحلقات المفتوحة (Loop Prevention Safeguards) ---
+		senderID := msg.From.ID
+		customerChatID := msg.Chat.ID
+		incomingText := strings.TrimSpace(msg.Text)
+
+		lastMessagesMutex.Lock()
+		// أ) منع تكرار ذات النص بالضبط لمنع الدوران الدائم (Deduplication)
+		if prevText, exists := lastMessages[customerChatID]; exists && prevText == incomingText && incomingText != "" {
+			lastMessagesMutex.Unlock()
+			log.Printf("⚠️ تم إيقاف حلقة تكرار محتملة مع الشات: %d", customerChatID)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// ب) تحديد المعدل الزمني للردود (Rate Limiting: رد كل 3 ثوانٍ كحد أقصى للمحادثة)
+		if lastTime, exists := lastReplyTime[customerChatID]; exists && time.Since(lastTime) < 3*time.Second {
+			lastMessagesMutex.Unlock()
+			log.Printf("⚠️ تجاهل طلب سريع جداً من الشات: %d", customerChatID)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		lastMessages[customerChatID] = incomingText
+		lastReplyTime[customerChatID] = time.Now()
+		lastMessagesMutex.Unlock()
+		// -------------------------------------------------------------
 
 		adminID := getAdminIDFromBusinessConn(botToken, msg.BusinessConnectionID)
 		if adminID == 0 {
@@ -627,8 +682,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		senderID := msg.From.ID
-		customerChatID := msg.Chat.ID
 		for _, exID := range config.Excluded {
 			if exID == senderID || exID == customerChatID {
 				w.WriteHeader(http.StatusOK)
@@ -641,17 +694,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			customerName = "صديقي"
 		}
 
-		// --- الترجمة الفورية للرسائل القادمة دون إرسال إشعار للمطور ---
 		var detectedLang string
-		if strings.TrimSpace(msg.Text) != "" {
-			_, dLang, err := translateText(msg.Text, "ar")
+		if incomingText != "" {
+			_, dLang, err := translateText(incomingText, "ar")
 			if err == nil && dLang != "" {
 				detectedLang = dLang
 			}
 		}
 
 		var replyText string
-		if strings.TrimSpace(msg.Text) == "" {
+		if incomingText == "" {
 			replyText = "شكراً لتواصلك يا " + customerName + " 🌸\nاستلمت رسالتك وسأرد عليك قريباً."
 		} else if config.AutoReply == "" {
 			replyText = "أهلاً بك يا " + customerName + " 🌸\nأنا غير متوفر الآن، اترك رسالتك وسأرد عليك قريباً."
@@ -662,7 +714,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			replyText = "أهلاً بك يا " + customerName + " 🌸\n" + config.AutoReply
 		}
 
-		// إذا كانت لغة العميل غير العربية، يتم ترجمة الرد التلقائي إلى لغته فوراً
 		if detectedLang != "" && detectedLang != "ar" {
 			if translatedReply, _, err := translateText(replyText, detectedLang); err == nil && translatedReply != "" {
 				replyText = translatedReply
@@ -691,6 +742,30 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// دالة جلب توكن البوتات المصغرة المدارة (Managed Bot Token)
+func getManagedBotToken(token, managedUsername string) (string, error) {
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/getManagedBotToken?user_id=%s", token, managedUsername)
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var res struct {
+		Ok     bool `json:"ok"`
+		Result struct {
+			AccessToken string `json:"access_token"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return "", err
+	}
+	if !res.Ok {
+		return "", fmt.Errorf("failed to fetch managed token")
+	}
+	return res.Result.AccessToken, nil
 }
 
 func getAdminIDFromBusinessConn(token string, connID string) int64 {
@@ -1134,10 +1209,9 @@ func setBusinessAccountProfilePhoto(token, businessConnID, fileID string) error 
 	return postMultipartBusinessAPI(token, "setBusinessAccountProfilePhoto", fields, "photo", "profile.jpg", data)
 }
 
-// دالة نشر الستوري المضبوطة لرفع الصور والفيديوهات دون تعارض مع أسماء الحقول
 func postBusinessStory(token, businessConnID, mediaType, fileID string, durationSeconds int, activePeriod string, lang string, excludedIDs []int64) error {
 	if mediaType == "video" && durationSeconds > 60 {
-		return fmt.Errorf(tr(lang, "video_too_long_error"))
+		return fmt.Sprintf(tr(lang, "video_too_long_error"))
 	}
 
 	data, err := downloadFileFromTelegram(token, fileID)
