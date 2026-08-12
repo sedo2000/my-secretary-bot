@@ -43,114 +43,114 @@ var quotes = []string{
 // --- قاموس الترجمة: عربي (افتراضي) وإنجليزي ---
 var translations = map[string]map[string]string{
 	"ar": {
-		"main_menu_title":        "القائمة الرئيسية 🤖:",
-		"welcome":                "أهلاً بك في لوحة تحكم البوت 🤖\nاختر من الأزرار أدناه للتحكم الكامل:",
-		"stop_btn":                "🛑 إيقاف الرد",
-		"start_btn":               "🟢 تشغيل الرد",
-		"edit_text_btn":           "📝 تعديل نص الرد",
-		"exclude_btn":             "👤 استثناء حساب",
-		"list_excluded_btn":       "📋 عرض المستثنين",
-		"clear_excluded_btn":      "🧹 مسح المستثنين",
-		"profile_menu_btn":        "🧑 إدارة الملف الشخصي",
-		"post_story_btn":          "📖 نشر قصة",
-		"lang_ar_btn":             "🇮🇶 العربية",
-		"lang_en_btn":             "🇺🇸 English",
-		"back_btn":                "🔙 رجوع",
-		"stopped_msg":             "🛑 تم إيقاف الرد التلقائي بنجاح.",
-		"started_msg":             "🟢 تم تشغيل الرد التلقائي بنجاح.",
-		"edit_text_prompt":        "📝 أرسل الآن نص الرد التلقائي الجديد:",
-		"saved_text_msg":          "✅ تم حفظ نص الرد التلقائي الجديد بنجاح!",
-		"exclude_prompt":          "👤 أرسل ايدي الحساب المراد استثناؤه الآن:",
-		"invalid_id_msg":          "❌ أرقام فقط! أرسل الايدي بشكل صحيح.",
-		"id_added_msg":            "✅ تم إضافة الايدي `%d` إلى قائمة الاستثناء.",
-		"list_excluded_title":     "📋 **قائمة الحسابات المستثناة:**\n",
-		"no_excluded":             "لا يوجد حسابات مستثناة حالياً.",
-		"cleared_excluded_msg":    "🧹 تم مسح جميع الاستثناءات بنجاح.",
-		"profile_menu_title":      "🧑 إدارة الملف الشخصي - اختر ما تريد تعديله:",
-		"edit_first_name_btn":     "✏️ تعديل الاسم",
-		"edit_bio_btn":            "📝 تعديل النبذة",
-		"edit_photo_btn":          "🖼️ تعديل الصورة",
-		"edit_username_btn":       "🔗 تعديل اليوزر",
-		"no_business_connection":  "❌ لم يتم ربط حساب تجاري بعد بالبوت.",
-		"first_name_prompt":       "✏️ أرسل الآن الاسم الأول الجديد (والاسم الأخير بعده بمسافة، اختياري):",
-		"bio_prompt":              "📝 أرسل الآن النبذة الجديدة (حد أقصى 70 حرف):",
-		"username_prompt":         "🔗 أرسل الآن اسم المستخدم الجديد (بدون @):",
-		"photo_prompt":            "🖼️ أرسل الآن الصورة الجديدة لملفك الشخصي:",
-		"name_updated":            "✅ تم تعديل الاسم بنجاح!",
-		"bio_updated":             "✅ تم تعديل النبذة بنجاح!",
-		"username_updated":        "✅ تم تعديل اسم المستخدم بنجاح!",
-		"photo_updated":           "✅ تم تعديل صورة الملف الشخصي بنجاح!",
-		"select_story_duration":   "⏱️ اختر مدة ظهور القصة المطلوبة:",
-		"dur_6h":                  "6 ساعات",
-		"dur_12h":                 "12 ساعة",
-		"dur_24h":                 "24 ساعة",
-		"dur_48h":                 "48 ساعة",
-		"story_prompt":            "📖 أرسل الآن صورة أو فيديو (حد أقصى 60 ثانية) لنشره كقصة (ستبقى ظاهرة لمدة %s):",
-		"story_updated":           "✅ تم نشر القصة بنجاح! ستبقى ظاهرة لمدة %s.",
-		"your_id_msg":             "الايدي الخاص بك هو:\n`%d`",
-		"fail_name":               "❌ فشل تعديل الاسم: %s",
-		"fail_bio":                "❌ فشل تعديل النبذة: %s",
-		"fail_username":           "❌ فشل تعديل اليوزر: %s",
-		"fail_photo":              "❌ فشل تعديل الصورة: %s",
-		"fail_story":              "❌ فشل نشر القصة: %s",
-		"need_real_photo":         "❌ أرسل صورة فعلية (لا يقبل ملفات أو نصوص).",
-		"need_real_media_story":   "❌ أرسل صورة أو فيديو فعلي لنشره كقصة.",
-		"video_too_long_error":    "الفيديو أطول من 60 ثانية، وهذا الحد الأقصى المسموح لقصص تليجرام",
+		"main_menu_title":       "القائمة الرئيسية 🤖:",
+		"welcome":               "أهلاً بك في لوحة تحكم البوت 🤖\nاختر من الأزرار أدناه للتحكم الكامل:",
+		"stop_btn":              "🛑 إيقاف الرد",
+		"start_btn":             "🟢 تشغيل الرد",
+		"edit_text_btn":         "📝 تعديل نص الرد",
+		"exclude_btn":           "👤 استثناء حساب",
+		"list_excluded_btn":     "📋 عرض المستثنين",
+		"clear_excluded_btn":    "🧹 مسح المستثنين",
+		"profile_menu_btn":      "🧑 إدارة الملف الشخصي",
+		"post_story_btn":        "📖 نشر قصة",
+		"lang_ar_btn":           "🇮🇶 العربية",
+		"lang_en_btn":           "🇺🇸 English",
+		"back_btn":              "🔙 رجوع",
+		"stopped_msg":           "🛑 تم إيقاف الرد التلقائي بنجاح.",
+		"started_msg":           "🟢 تم تشغيل الرد التلقائي بنجاح.",
+		"edit_text_prompt":      "📝 أرسل الآن نص الرد التلقائي الجديد:\n(ملاحظة: سيتم إضافة دالة `{name}` تلقائياً إذا لم تقم بكتابتها).",
+		"saved_text_msg":        "✅ تم حفظ نص الرد التلقائي الجديد بنجاح!",
+		"exclude_prompt":        "👤 أرسل ايدي الحساب المراد استثناؤه الآن:\n(يمكن الحصول على الـ ID عبر إرسال أمر `/id` للبوت).",
+		"invalid_id_msg":        "❌ أرقام فقط! أرسل الايدي بشكل صحيح.",
+		"id_added_msg":          "✅ تم إضافة الايدي `%d` إلى قائمة الاستثناء.",
+		"list_excluded_title":   "📋 **قائمة الحسابات المستثناة:**\n",
+		"no_excluded":           "لا يوجد حسابات مستثناة حالياً.",
+		"cleared_excluded_msg":  "🧹 تم مسح جميع الاستثناءات بنجاح.",
+		"profile_menu_title":    "🧑 إدارة الملف الشخصي - اختر ما تريد تعديله:",
+		"edit_first_name_btn":   "✏️ تعديل الاسم",
+		"edit_bio_btn":          "📝 تعديل النبذة",
+		"edit_photo_btn":        "🖼️ تعديل الصورة",
+		"edit_username_btn":     "🔗 تعديل اليوزر",
+		"no_business_connection": "❌ لم يتم ربط حساب تجاري بعد بالبوت.",
+		"first_name_prompt":     "✏️ أرسل الآن الاسم الأول الجديد (والاسم الأخير بعده بمسافة، اختياري):",
+		"bio_prompt":            "📝 أرسل الآن النبذة الجديدة (حد أقصى 70 حرف):",
+		"username_prompt":       "🔗 أرسل الآن اسم المستخدم الجديد (بدون @):",
+		"photo_prompt":          "🖼️ أرسل الآن الصورة الجديدة لملفك الشخصي:",
+		"name_updated":          "✅ تم تعديل الاسم بنجاح!",
+		"bio_updated":           "✅ تم تعديل النبذة بنجاح!",
+		"username_updated":      "✅ تم تعديل اسم المستخدم بنجاح!",
+		"photo_updated":         "✅ تم تعديل صورة الملف الشخصي بنجاح!",
+		"select_story_duration": "⏱️ اختر مدة ظهور القصة المطلوبة:",
+		"dur_6h":                "6 ساعات",
+		"dur_12h":               "12 ساعة",
+		"dur_24h":               "24 ساعة",
+		"dur_48h":               "48 ساعة",
+		"story_prompt":          "📖 أرسل الآن صورة أو فيديو (حد أقصى 60 ثانية) لنشره كقصة (ستبقى ظاهرة لمدة %s):",
+		"story_updated":         "✅ تم نشر القصة بنجاح! ستبقى ظاهرة لمدة %s.",
+		"your_id_msg":           "🆔 **الايدي الخاص بك هو:**\n`%d`\n\nاضغط على الزر الملون أدناه لنسخ الـ ID تلقائياً 👇",
+		"fail_name":             "❌ فشل تعديل الاسم: %s",
+		"fail_bio":              "❌ فشل تعديل النبذة: %s",
+		"fail_username":         "❌ فشل تعديل اليوزر: %s",
+		"fail_photo":            "❌ فشل تعديل الصورة: %s",
+		"fail_story":            "❌ فشل نشر القصة: %s",
+		"need_real_photo":       "❌ أرسل صورة فعلية (لا يقبل ملفات أو نصوص).",
+		"need_real_media_story": "❌ أرسل صورة أو فيديو فعلي لنشره كقصة.",
+		"video_too_long_error":  "الفيديو أطول من 60 ثانية، وهذا الحد الأقصى المسموح لقصص تليجرام",
 	},
 	"en": {
-		"main_menu_title":        "Main Menu 🤖:",
-		"welcome":                "Welcome to the bot control panel 🤖\nChoose from the buttons below for full control:",
-		"stop_btn":                "🛑 Stop Auto-Reply",
-		"start_btn":               "🟢 Start Auto-Reply",
-		"edit_text_btn":           "📝 Edit Reply Text",
-		"exclude_btn":             "👤 Exclude Account",
-		"list_excluded_btn":       "📋 View Excluded",
-		"clear_excluded_btn":      "🧹 Clear Excluded",
-		"profile_menu_btn":        "🧑 Manage Profile",
-		"post_story_btn":          "📖 Post Story",
-		"lang_ar_btn":             "🇮🇶 العربية",
-		"lang_en_btn":             "🇺🇸 English",
-		"back_btn":                "🔙 Back",
-		"stopped_msg":             "🛑 Auto-reply has been stopped.",
-		"started_msg":             "🟢 Auto-reply has been started.",
-		"edit_text_prompt":        "📝 Send the new auto-reply text now:",
-		"saved_text_msg":          "✅ New auto-reply text saved successfully!",
-		"exclude_prompt":          "👤 Send the account ID to exclude now:",
-		"invalid_id_msg":          "❌ Numbers only! Please send a valid ID.",
-		"id_added_msg":            "✅ ID `%d` added to the exclusion list.",
-		"list_excluded_title":     "📋 **Excluded Accounts:**\n",
-		"no_excluded":             "No excluded accounts currently.",
-		"cleared_excluded_msg":    "🧹 All exclusions cleared successfully.",
-		"profile_menu_title":      "🧑 Manage Profile - choose what to edit:",
-		"edit_first_name_btn":     "✏️ Edit Name",
-		"edit_bio_btn":            "📝 Edit Bio",
-		"edit_photo_btn":          "🖼️ Edit Photo",
-		"edit_username_btn":       "🔗 Edit Username",
-		"no_business_connection":  "❌ No business account connected to the bot yet.",
-		"first_name_prompt":       "✏️ Send the new first name now (optionally followed by a last name):",
-		"bio_prompt":              "📝 Send the new bio now (max 70 characters):",
-		"username_prompt":         "🔗 Send the new username now (without @):",
-		"photo_prompt":            "🖼️ Send the new profile photo now:",
-		"name_updated":            "✅ Name updated successfully!",
-		"bio_updated":             "✅ Bio updated successfully!",
-		"username_updated":        "✅ Username updated successfully!",
-		"photo_updated":           "✅ Profile photo updated successfully!",
-		"select_story_duration":   "⏱️ Select story duration:",
-		"dur_6h":                  "6 Hours",
-		"dur_12h":                 "12 Hours",
-		"dur_24h":                 "24 Hours",
-		"dur_48h":                 "48 Hours",
-		"story_prompt":            "📖 Send a photo or video now (max 60 seconds) to post as a story (visible for %s):",
-		"story_updated":           "✅ Story posted successfully! It will remain visible for %s.",
-		"your_id_msg":             "Your ID is:\n`%d`",
-		"fail_name":               "❌ Failed to update name: %s",
-		"fail_bio":                "❌ Failed to update bio: %s",
-		"fail_username":           "❌ Failed to update username: %s",
-		"fail_photo":              "❌ Failed to update photo: %s",
-		"fail_story":              "❌ Failed to post story: %s",
-		"need_real_photo":         "❌ Please send an actual photo (files or text not accepted).",
-		"need_real_media_story":   "❌ Please send an actual photo or video to post as a story.",
-		"video_too_long_error":    "The video is longer than 60 seconds, which is Telegram's maximum allowed for stories",
+		"main_menu_title":       "Main Menu 🤖:",
+		"welcome":               "Welcome to the bot control panel 🤖\nChoose from the buttons below for full control:",
+		"stop_btn":              "🛑 Stop Auto-Reply",
+		"start_btn":             "🟢 Start Auto-Reply",
+		"edit_text_btn":         "📝 Edit Reply Text",
+		"exclude_btn":           "👤 Exclude Account",
+		"list_excluded_btn":     "📋 View Excluded",
+		"clear_excluded_btn":    "🧹 Clear Excluded",
+		"profile_menu_btn":      "🧑 Manage Profile",
+		"post_story_btn":        "📖 Post Story",
+		"lang_ar_btn":           "🇮🇶 العربية",
+		"lang_en_btn":           "🇺🇸 English",
+		"back_btn":              "🔙 Back",
+		"stopped_msg":           "🛑 Auto-reply has been stopped.",
+		"started_msg":           "🟢 Auto-reply has been started.",
+		"edit_text_prompt":      "📝 Send the new auto-reply text now:\n(Note: `{name}` tag will be added automatically if omitted).",
+		"saved_text_msg":        "✅ New auto-reply text saved successfully!",
+		"exclude_prompt":        "👤 Send the account ID to exclude now:\n(You can get the ID by sending `/id` command to the bot).",
+		"invalid_id_msg":        "❌ Numbers only! Please send a valid ID.",
+		"id_added_msg":          "✅ ID `%d` added to the exclusion list.",
+		"list_excluded_title":   "📋 **Excluded Accounts:**\n",
+		"no_excluded":           "No excluded accounts currently.",
+		"cleared_excluded_msg":  "🧹 All exclusions cleared successfully.",
+		"profile_menu_title":    "🧑 Manage Profile - choose what to edit:",
+		"edit_first_name_btn":   "✏️ Edit Name",
+		"edit_bio_btn":          "📝 Edit Bio",
+		"edit_photo_btn":        "🖼️ Edit Photo",
+		"edit_username_btn":     "🔗 Edit Username",
+		"no_business_connection": "❌ No business account connected to the bot yet.",
+		"first_name_prompt":     "✏️ Send the new first name now (optionally followed by a last name):",
+		"bio_prompt":            "📝 Send the new bio now (max 70 characters):",
+		"username_prompt":       "🔗 Send the new username now (without @):",
+		"photo_prompt":          "🖼️ Send the new profile photo now:",
+		"name_updated":          "✅ Name updated successfully!",
+		"bio_updated":           "✅ Bio updated successfully!",
+		"username_updated":      "✅ Username updated successfully!",
+		"photo_updated":         "✅ Profile photo updated successfully!",
+		"select_story_duration": "⏱️ Select story duration:",
+		"dur_6h":                "6 Hours",
+		"dur_12h":               "12 Hours",
+		"dur_24h":               "24 Hours",
+		"dur_48h":               "48 Hours",
+		"story_prompt":          "📖 Send a photo or video now (max 60 seconds) to post as a story (visible for %s):",
+		"story_updated":         "✅ Story posted successfully! It will remain visible for %s.",
+		"your_id_msg":           "🆔 **Your ID is:**\n`%d`\n\nTap the colored button below to copy your ID automatically 👇",
+		"fail_name":             "❌ Failed to update name: %s",
+		"fail_bio":              "❌ Failed to update bio: %s",
+		"fail_username":         "❌ Failed to update username: %s",
+		"fail_photo":            "❌ Failed to update photo: %s",
+		"fail_story":            "❌ Failed to post story: %s",
+		"need_real_photo":       "❌ Please send an actual photo (files or text not accepted).",
+		"need_real_media_story": "❌ Please send an actual photo or video to post as a story.",
+		"video_too_long_error":  "The video is longer than 60 seconds, which is Telegram's maximum allowed for stories",
 	},
 }
 
@@ -232,6 +232,17 @@ type BotConfig struct {
 	State          string  `json:"state"`
 	BusinessConnID string  `json:"business_conn_id"`
 	Lang           string  `json:"lang"`
+}
+
+type CopyTextButton struct {
+	Text string `json:"text"`
+}
+
+type InlineKeyboardButton struct {
+	Text         string          `json:"text"`
+	CallbackData string          `json:"callback_data,omitempty"`
+	CopyText     *CopyTextButton `json:"copy_text,omitempty"`
+	Style        string          `json:"style,omitempty"`
 }
 
 type TelegramUpdate struct {
@@ -316,10 +327,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- فحص أمني: التحقق من Secret Token الخاص بالـ Webhook ---
 	if secret := os.Getenv("TELEGRAM_WEBHOOK_SECRET"); secret != "" {
 		if r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != secret {
-			log.Println("رفض طلب: secret token غير مطابق")
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -327,7 +336,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	var update TelegramUpdate
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
-		log.Println("خطأ في قراءة التحديث:", err)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -371,7 +379,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		case "exclude":
 			config.State = "waiting_id"
 			saveConfig(botToken, adminID, config, msgID)
-			sendSubMenu(botToken, adminID, lang, tr(lang, "exclude_prompt"))
+			sendSubMenuWithIDCopy(botToken, adminID, lang, tr(lang, "exclude_prompt"), adminID)
 		case "list_excluded":
 			txt := tr(lang, "list_excluded_title")
 			if len(config.Excluded) == 0 {
@@ -450,7 +458,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. معالجة محادثة التحكم الخاصة بك (الأوامر والرسائل المباشرة للبوت)
+	// 2. معالجة محادثة التحكم الخاصة بك (الأوامر والرسائل المباشرة للبوت في الخاصة فقط)
 	if update.Message != nil {
 		msg := update.Message
 		chatID := msg.Chat.ID
@@ -459,22 +467,30 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		lang := config.Lang
 
 		if msg.Text == "/start" {
+			config.State = ""
+			saveConfig(botToken, chatID, config, msgID)
 			sendMenu(botToken, chatID, lang, tr(lang, "welcome"))
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
 		if msg.Text == "/id" {
-			sendMessage(botToken, chatID, fmt.Sprintf(tr(lang, "your_id_msg"), msg.From.ID))
+			sendIDMessage(botToken, chatID, msg.From.ID, lang)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
+		// معالجة المدخلات حسب حالة المستخدم (بدون أي ردود تلقائية أو ترحيبية خارجية)
 		if config.State == "waiting_text" {
-			config.AutoReply = msg.Text
+			replyInput := strings.TrimSpace(msg.Text)
+			// إضافة دالة {name} تلقائياً إذا لم يقم المستخدم بإضافتها
+			if !strings.Contains(replyInput, "{name}") && !strings.Contains(replyInput, "{الاسم}") {
+				replyInput = replyInput + " {name}"
+			}
+			config.AutoReply = replyInput
 			config.State = ""
 			saveConfig(botToken, chatID, config, msgID)
-			sendMenu(botToken, chatID, lang, tr(lang, "saved_text_msg"))
+			sendMenu(botToken, chatID, lang, tr(lang, "saved_text_msg")+"\n\n💬 *النص المحفوظ:*\n"+replyInput)
 		} else if config.State == "waiting_id" {
 			id, err := strconv.ParseInt(strings.TrimSpace(msg.Text), 10, 64)
 			if err == nil {
@@ -492,7 +508,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				saveConfig(botToken, chatID, config, msgID)
 				sendMenu(botToken, chatID, lang, fmt.Sprintf(tr(lang, "id_added_msg"), id))
 			} else {
-				sendSubMenu(botToken, chatID, lang, tr(lang, "invalid_id_msg"))
+				sendSubMenuWithIDCopy(botToken, chatID, lang, tr(lang, "invalid_id_msg"), chatID)
 			}
 		} else if config.State == "waiting_first_name" {
 			parts := strings.SplitN(strings.TrimSpace(msg.Text), " ", 2)
@@ -510,7 +526,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			}
 		} else if config.State == "waiting_bio" {
 			if len([]rune(msg.Text)) > 70 {
-				sendSubMenu(botToken, chatID, lang, "❌ النبذة طويلة جداً! الحد الأقصى المسموح به من تيليجرام هو 70 حرفاً فقط.\nأرسل نبذة أقصر:")
+				sendSubMenu(botToken, chatID, lang, "❌ النبذة طويلة جداً! الحد الأقصى المسموح به من تيليجرام هو 70 حرفاً فقط.")
 			} else if err := setBusinessAccountBio(botToken, config.BusinessConnID, msg.Text); err != nil {
 				sendSubMenu(botToken, chatID, lang, fmt.Sprintf(tr(lang, "fail_bio"), err.Error()))
 			} else {
@@ -571,7 +587,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if update.BusinessMessage != nil {
 		msg := update.BusinessMessage
 
+		// تجاهل الرسائل الصادرة من حسابك
 		if msg.IsOutgoing {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		trimmedText := strings.TrimSpace(msg.Text)
+
+		// [تعديل هائم جداً] تجنب التكرار والرد على الأوامر: تجاهل كل أومر يبدأ بـ / (مثل /start) في محادثات البزنس
+		if strings.HasPrefix(trimmedText, "/") {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -585,15 +610,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		senderID := msg.From.ID
 		customerChatID := msg.Chat.ID
 
-		// [تعديل هائم] 1: استثناء الآدمن نفسه من استقبال ردود تلقائية أو إشعارات لنفسه
+		// استثناء حسابك المباشر من الرد
 		if senderID == adminID || customerChatID == adminID {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		// [تعديل هائم] 2: تجاهل الأوامر التي تبدأ بـ / (مثل /start) حتى لا يُرد عليها تلقائياً
-		trimmedText := strings.TrimSpace(msg.Text)
-		if strings.HasPrefix(trimmedText, "/") {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -605,6 +623,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// استثناء الحسابات المحظورة
 		for _, exID := range config.Excluded {
 			if exID == senderID || exID == customerChatID {
 				w.WriteHeader(http.StatusOK)
@@ -617,14 +636,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			customerName = "صديقي"
 		}
 
-		// --- الترجمة الفورية وتحديد اللغة للرسائل القادمة ---
+		// --- الترجمة الفورية للأشخاص الأجانب ---
 		var detectedLang string
-		// عدم الترجمة للأوامر أو الكلمات القصيرة جداً لمنع الكشف الخاطئ للغة
 		if len(trimmedText) > 3 {
 			translatedToAr, dLang, err := translateText(trimmedText, "ar")
 			if err == nil && dLang != "" {
 				detectedLang = dLang
-				// إذا كانت الرسالة بلغة غير العربية، يرسل البوت إشعاراً مترجماً لك في محادثة التحكم
 				if detectedLang != "ar" && detectedLang != "und" && adminID != 0 {
 					notifyMsg := fmt.Sprintf(
 						"🌐 *رسالة جديدة بلغة مترجمة (`%s`)*\n👤 *العميل:* %s (`%d`)\n\n💬 *النص الأصلي:*\n%s\n\n✨ *الترجمة للعربية:*\n%s",
@@ -636,18 +653,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var replyText string
-		if trimmedText == "" {
-			replyText = "شكراً لتواصلك يا " + customerName + " 🌸\nاستلمت رسالتك وسأرد عليك قريباً."
-		} else if config.AutoReply == "" {
+		if config.AutoReply == "" {
 			replyText = "أهلاً بك يا " + customerName + " 🌸\nأنا غير متوفر الآن، اترك رسالتك وسأرد عليك قريباً."
-		} else if strings.Contains(config.AutoReply, "{name}") || strings.Contains(config.AutoReply, "{الاسم}") {
-			replyText = strings.ReplaceAll(config.AutoReply, "{name}", customerName)
-			replyText = strings.ReplaceAll(replyText, "{الاسم}", customerName)
 		} else {
-			replyText = "أهلاً بك يا " + customerName + " 🌸\n" + config.AutoReply
+			replyText = config.AutoReply
+			replyText = strings.ReplaceAll(replyText, "{name}", customerName)
+			replyText = strings.ReplaceAll(replyText, "{الاسم}", customerName)
 		}
 
-		// إذا كانت لغة العميل أجنبية، يترجم البوت نص الرد التلقائي إلى لغة العميل تلقائياً
 		if detectedLang != "" && detectedLang != "ar" && detectedLang != "und" {
 			if translatedReply, _, err := translateText(replyText, detectedLang); err == nil && translatedReply != "" {
 				replyText = translatedReply
@@ -659,7 +672,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. رصد تفعيل/تعديل ربط حساب تجاري جديد بالبوت وإشعار المطوّر
+	// 4. رصد تفعيل الربط بالبزنس
 	if update.BusinessConnection != nil {
 		bc := update.BusinessConnection
 		if bc.IsEnabled {
@@ -685,14 +698,12 @@ func getAdminIDFromBusinessConn(token string, connID string) int64 {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/getBusinessConnection?business_connection_id=%s", token, connID)
 	resp, err := httpClient.Get(url)
 	if err != nil {
-		log.Println("خطأ getBusinessConnection:", err)
 		return 0
 	}
 	defer resp.Body.Close()
 
 	var res BusinessConnectionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		log.Println("خطأ فك تشفير getBusinessConnection:", err)
 		return 0
 	}
 	if res.Result.UserChatID != 0 {
@@ -718,7 +729,6 @@ func getConfig(token string, chatID int64) (BotConfig, int) {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/getChat?chat_id=%d", token, chatID)
 	resp, err := httpClient.Get(url)
 	if err != nil {
-		log.Println("خطأ getChat:", err)
 		return defaultCfg, 0
 	}
 	defer resp.Body.Close()
@@ -733,7 +743,6 @@ func getConfig(token string, chatID int64) (BotConfig, int) {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		log.Println("خطأ فك تشفير getChat:", err)
 		return defaultCfg, 0
 	}
 
@@ -765,9 +774,7 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 			"text":       cfgText,
 		}
 		pBytes, _ := json.Marshal(payload)
-		if _, err := httpClient.Post(url, "application/json", bytes.NewBuffer(pBytes)); err != nil {
-			log.Println("خطأ editMessageText:", err)
-		}
+		httpClient.Post(url, "application/json", bytes.NewBuffer(pBytes))
 	} else {
 		url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
 		payload := map[string]interface{}{
@@ -777,7 +784,6 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 		pBytes, _ := json.Marshal(payload)
 		resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(pBytes))
 		if err != nil {
-			log.Println("خطأ sendMessage (saveConfig):", err)
 			return
 		}
 		defer resp.Body.Close()
@@ -787,7 +793,6 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 			} `json:"result"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-			log.Println("خطأ فك تشفير sendMessage:", err)
 			return
 		}
 		if res.Result.MessageID != 0 {
@@ -798,14 +803,64 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 				"disable_notification": true,
 			}
 			pPinBytes, _ := json.Marshal(pinPayload)
-			if _, err := httpClient.Post(pinUrl, "application/json", bytes.NewBuffer(pPinBytes)); err != nil {
-				log.Println("خطأ pinChatMessage:", err)
-			}
+			httpClient.Post(pinUrl, "application/json", bytes.NewBuffer(pPinBytes))
 		}
 	}
 }
 
-// دوال إنشاء القوائم والأزرار مع تطبيق الألوان
+// دالة إرسال الـ ID بزر تفاعلي ملون ومميز للنسخ المباشر
+func sendIDMessage(token string, chatID int64, userID int64, lang string) {
+	idStr := strconv.FormatInt(userID, 10)
+	msgText := fmt.Sprintf(tr(lang, "your_id_msg"), userID)
+
+	keyboard := map[string]interface{}{
+		"inline_keyboard": [][]InlineKeyboardButton{
+			{
+				{
+					Text:     fmt.Sprintf("📋 ID: %s (اضغط للنسخ)", idStr),
+					CopyText: &CopyTextButton{Text: idStr},
+					Style:    "primary",
+				},
+			},
+		},
+	}
+
+	payload := map[string]interface{}{
+		"chat_id":      chatID,
+		"text":         msgText,
+		"parse_mode":   "Markdown",
+		"reply_markup": keyboard,
+	}
+	b, _ := json.Marshal(payload)
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+}
+
+func sendSubMenuWithIDCopy(token string, chatID int64, lang, text string, userID int64) {
+	idStr := strconv.FormatInt(userID, 10)
+	keyboard := map[string]interface{}{
+		"inline_keyboard": [][]InlineKeyboardButton{
+			{
+				{
+					Text:     fmt.Sprintf("📋 ID الخاص بك: %s (اضغط للنسخ)", idStr),
+					CopyText: &CopyTextButton{Text: idStr},
+					Style:    "primary",
+				},
+			},
+			{
+				{Text: tr(lang, "back_btn"), CallbackData: "main_menu", Style: "danger"},
+			},
+		},
+	}
+
+	payload := map[string]interface{}{
+		"chat_id":      chatID,
+		"text":         text,
+		"parse_mode":   "Markdown",
+		"reply_markup": keyboard,
+	}
+	b, _ := json.Marshal(payload)
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+}
 
 func sendMenu(token string, chatID int64, lang, text string) {
 	keyboard := map[string]interface{}{
@@ -844,9 +899,7 @@ func sendMenu(token string, chatID int64, lang, text string) {
 		"reply_markup": keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendMenu:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func sendStoryDurationMenu(token string, chatID int64, lang string) {
@@ -873,9 +926,7 @@ func sendStoryDurationMenu(token string, chatID int64, lang string) {
 		"reply_markup": keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendStoryDurationMenu:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func sendProfileMenu(token string, chatID int64, lang, text string) {
@@ -896,9 +947,7 @@ func sendProfileMenu(token string, chatID int64, lang, text string) {
 		"reply_markup": keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendProfileMenu:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func sendSubMenu(token string, chatID int64, lang, text string) {
@@ -915,9 +964,7 @@ func sendSubMenu(token string, chatID int64, lang, text string) {
 		"reply_markup": keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendSubMenu:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func sendMessage(token string, chatID int64, text string) {
@@ -927,9 +974,7 @@ func sendMessage(token string, chatID int64, text string) {
 		"parse_mode": "Markdown",
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendMessage:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID string) {
@@ -948,9 +993,7 @@ func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID st
 		"reply_markup":           keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendBusinessReplyWithQuoteButton:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func updateButtonQuote(token string, chatID int64, msgID int, newQuote string) {
@@ -966,20 +1009,16 @@ func updateButtonQuote(token string, chatID int64, msgID int, newQuote string) {
 		"reply_markup": keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/editMessageReplyMarkup", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ updateButtonQuote:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/editMessageReplyMarkup", "application/json", bytes.NewBuffer(b))
 }
 
 func notifyDeveloper(token string, userID int64, firstName, lastName, username string) {
 	devChatID := os.Getenv("DEVELOPER_CHAT_ID")
 	if devChatID == "" {
-		log.Println("تحذير: DEVELOPER_CHAT_ID غير مضبوط، لن يتم إرسال إشعار التفعيل")
 		return
 	}
 	devID, err := strconv.ParseInt(devChatID, 10, 64)
 	if err != nil {
-		log.Println("خطأ: DEVELOPER_CHAT_ID غير صالح:", err)
 		return
 	}
 
@@ -1004,8 +1043,6 @@ func notifyDeveloper(token string, userID int64, firstName, lastName, username s
 	sendMessage(token, devID, text)
 }
 
-// --- دوال إدارة الملف الشخصي والقصص عبر Telegram Business API ---
-
 type apiResult struct {
 	Ok          bool   `json:"ok"`
 	Description string `json:"description"`
@@ -1015,7 +1052,6 @@ func downloadTelegramFile(token, fileID string) ([]byte, error) {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/getFile?file_id=%s", token, fileID)
 	resp, err := mediaClient.Get(url)
 	if err != nil {
-		log.Println("خطأ getFile:", err)
 		return nil, fmt.Errorf("تعذر الاتصال بتليجرام لجلب الملف")
 	}
 	defer resp.Body.Close()
@@ -1028,25 +1064,21 @@ func downloadTelegramFile(token, fileID string) ([]byte, error) {
 		Description string `json:"description"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		log.Println("خطأ فك تشفير getFile:", err)
 		return nil, fmt.Errorf("رد غير متوقع عند جلب الملف")
 	}
 	if !res.Ok || res.Result.FilePath == "" {
-		log.Println("فشل getFile:", res.Description)
 		return nil, fmt.Errorf(res.Description)
 	}
 
 	fileURL := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", token, res.Result.FilePath)
 	fResp, err := mediaClient.Get(fileURL)
 	if err != nil {
-		log.Println("خطأ تنزيل الملف:", err)
 		return nil, fmt.Errorf("تعذر تنزيل الملف من تليجرام")
 	}
 	defer fResp.Body.Close()
 
 	data, err := io.ReadAll(fResp.Body)
 	if err != nil {
-		log.Println("خطأ قراءة بيانات الملف:", err)
 		return nil, fmt.Errorf("تعذر قراءة بيانات الملف")
 	}
 	return data, nil
@@ -1058,47 +1090,39 @@ func postMultipartBusinessAPI(token, method string, fields map[string]string, fi
 
 	for k, v := range fields {
 		if err := writer.WriteField(k, v); err != nil {
-			log.Println("خطأ تجهيز حقل multipart:", err)
 			return fmt.Errorf("خطأ داخلي في تجهيز الطلب")
 		}
 	}
 
 	part, err := writer.CreateFormFile(fileFieldName, fileName)
 	if err != nil {
-		log.Println("خطأ إنشاء ملف multipart:", err)
 		return fmt.Errorf("خطأ داخلي في تجهيز الملف")
 	}
 	if _, err := part.Write(fileBytes); err != nil {
-		log.Println("خطأ كتابة بيانات الملف:", err)
 		return fmt.Errorf("خطأ داخلي في كتابة الملف")
 	}
 	if err := writer.Close(); err != nil {
-		log.Println("خطأ إغلاق multipart writer:", err)
 		return fmt.Errorf("خطأ داخلي في إغلاق الطلب")
 	}
 
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/%s", token, method)
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
-		log.Println("خطأ تجهيز الطلب:", err)
 		return fmt.Errorf("تعذر تجهيز طلب الرفع")
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	resp, err := mediaClient.Do(req)
 	if err != nil {
-		log.Println("خطأ استدعاء", method, "(multipart):", err)
 		return fmt.Errorf("تعذر الاتصال بتليجرام")
 	}
 	defer resp.Body.Close()
 
 	var res apiResult
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		log.Println("خطأ فك تشفير رد", method, ":", err)
 		return fmt.Errorf("رد غير متوقع من تليجرام")
 	}
 	if !res.Ok {
-		log.Println("فشل", method, ":", res.Description)
 		return fmt.Errorf(res.Description)
 	}
 	return nil
@@ -1109,18 +1133,15 @@ func callBusinessAPI(token, method string, payload map[string]interface{}) error
 	b, _ := json.Marshal(payload)
 	resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(b))
 	if err != nil {
-		log.Println("خطأ استدعاء", method, ":", err)
 		return fmt.Errorf("تعذر الاتصال بتليجرام")
 	}
 	defer resp.Body.Close()
 
 	var res apiResult
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		log.Println("خطأ فك تشفير رد", method, ":", err)
 		return fmt.Errorf("رد غير متوقع من تليجرام")
 	}
 	if !res.Ok {
-		log.Println("فشل", method, ":", res.Description)
 		return fmt.Errorf(res.Description)
 	}
 	return nil
@@ -1208,15 +1229,11 @@ func deleteMessage(token string, chatID int64, msgID int) {
 		"message_id": msgID,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/deleteMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ deleteMessage:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/deleteMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func answerCallback(token, callbackID string) {
 	payload := map[string]string{"callback_query_id": callbackID}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/answerCallbackQuery", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ answerCallback:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/answerCallbackQuery", "application/json", bytes.NewBuffer(b))
 }
