@@ -239,7 +239,7 @@ type BotConfig struct {
 	IsStopped      bool    `json:"is_stopped"`
 	AutoReply      string  `json:"auto_reply"`
 	Excluded       []int64 `json:"excluded"`
-	StoryExcluded  []int64 `json:"story_excluded"` // تم إضافة حقل استثناءات القصص
+	StoryExcluded  []int64 `json:"story_excluded"`
 	State          string  `json:"state"`
 	BusinessConnID string  `json:"business_conn_id"`
 	Lang           string  `json:"lang"`
@@ -514,7 +514,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			} else {
 				sendSubMenu(botToken, chatID, lang, tr(lang, "invalid_id_msg"))
 			}
-		} else if config.State == "waiting_story_exclude_id" { // معالجة استقبال ايدي استثناء القصة
+		} else if config.State == "waiting_story_exclude_id" {
 			id, err := strconv.ParseInt(strings.TrimSpace(msg.Text), 10, 64)
 			if err == nil {
 				alreadyExists := false
@@ -605,7 +605,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. معالجة رسائل العملاء (Business Messages)
+	// 3. معالجة رسائل العملاء (Business Messages) - بدون إرسال إشعارات مزعجة
 	if update.BusinessMessage != nil {
 		msg := update.BusinessMessage
 
@@ -641,20 +641,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			customerName = "صديقي"
 		}
 
-		// --- الترجمة الفورية وتحديد اللغة للرسائل القادمة ---
+		// --- الترجمة الفورية للرسائل القادمة دون إرسال إشعار للمطور ---
 		var detectedLang string
 		if strings.TrimSpace(msg.Text) != "" {
-			translatedToAr, dLang, err := translateText(msg.Text, "ar")
+			_, dLang, err := translateText(msg.Text, "ar")
 			if err == nil && dLang != "" {
 				detectedLang = dLang
-				// إذا كانت الرسالة بلغة غير العربية، يرسل البوت إشعاراً مترجماً لك في محادثة التحكم
-				if detectedLang != "ar" && adminID != 0 {
-					notifyMsg := fmt.Sprintf(
-						"🌐 *رسالة جديدة بلغة مترجمة (`%s`)*\n👤 *العميل:* %s (`%d`)\n\n💬 *النص الأصلي:*\n%s\n\n✨ *الترجمة للعربية:*\n%s",
-						detectedLang, customerName, senderID, msg.Text, translatedToAr,
-					)
-					sendMessage(botToken, adminID, notifyMsg)
-				}
 			}
 		}
 
@@ -670,7 +662,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			replyText = "أهلاً بك يا " + customerName + " 🌸\n" + config.AutoReply
 		}
 
-		// إذا كانت لغة العميل أجنبية، يترجم البوت نص الرد التلقائي إلى لغة العميل تلقائياً قبل إرساله!
+		// إذا كانت لغة العميل غير العربية، يتم ترجمة الرد التلقائي إلى لغته فوراً
 		if detectedLang != "" && detectedLang != "ar" {
 			if translatedReply, _, err := translateText(replyText, detectedLang); err == nil && translatedReply != "" {
 				replyText = translatedReply
@@ -729,7 +721,7 @@ func getConfig(token string, chatID int64) (BotConfig, int) {
 		IsStopped:      false,
 		AutoReply:      "",
 		Excluded:       []int64{},
-		StoryExcluded:  []int64{}, // القيمة الافتراضية لقائمة استثناءات القصص
+		StoryExcluded:  []int64{},
 		State:          "",
 		BusinessConnID: "",
 		Lang:           "ar",
@@ -854,7 +846,6 @@ func sendMenu(token string, chatID int64, lang, text string) {
 	}
 }
 
-// تعديل قائمة القصص لإضافة أزرار الاستثناء الجديدة
 func sendStoryDurationMenu(token string, chatID int64, lang string) {
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]string{
@@ -967,8 +958,16 @@ func updateButtonQuote(token string, chatID int64, messageID int, newQuote strin
 }
 
 func notifyDeveloper(token string, devID int64, devFName, devLName, devUName string) {
-	msg := fmt.Sprintf("🎉 تم ربط حساب تجاري جديد بنجاح!\n\n👤 المستخدم: %s %s\n🔗 المعرف: @%s\n🆔 الايدي: `%d`\n\nأرسل /start في لوحة التحكم للبدء.", devFName, devLName, devUName, devID)
-	sendMessage(token, devID, msg)
+	devChatID := os.Getenv("DEVELOPER_CHAT_ID")
+	if devChatID == "" {
+		return
+	}
+	dID, err := strconv.ParseInt(devChatID, 10, 64)
+	if err != nil {
+		return
+	}
+	msg := fmt.Sprintf("🎉 تم ربط حساب تجاري جديد بنجاح!\n\n👤 المستخدم: %s %s\n🔗 المعرف: @%s\n🆔 الايدي: `%d`", devFName, devLName, devUName, devID)
+	sendMessage(token, dID, msg)
 }
 
 func deleteMessage(token string, chatID int64, messageID int) {
@@ -1070,7 +1069,7 @@ func downloadFileFromTelegram(token, fileID string) ([]byte, error) {
 	}
 
 	fileUrl := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", token, res.Result.FilePath)
-	fileResp, err := mediaClient.Get(fileUrl) // استخدام mediaClient المخصص للتحميل
+	fileResp, err := mediaClient.Get(fileUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -1105,7 +1104,7 @@ func postMultipartBusinessAPI(token, method string, fields map[string]string, fi
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
 
-	resp, err := mediaClient.Do(req) // استخدام mediaClient المخصص للرفع
+	resp, err := mediaClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -1124,8 +1123,18 @@ func postMultipartBusinessAPI(token, method string, fields map[string]string, fi
 	return nil
 }
 
-// تم تحديث الدالة لتدعم استقبال مصفوفة الايديات المستثناة وإضافتها لقواعد الخصوصية 
-// تم تحديث الدالة لفصل اسم حقل الملف المرفق عن حقل content لمنع التعارض مع Telegram API
+func setBusinessAccountProfilePhoto(token, businessConnID, fileID string) error {
+	data, err := downloadFileFromTelegram(token, fileID)
+	if err != nil {
+		return err
+	}
+	fields := map[string]string{
+		"business_connection_id": businessConnID,
+	}
+	return postMultipartBusinessAPI(token, "setBusinessAccountProfilePhoto", fields, "photo", "profile.jpg", data)
+}
+
+// دالة نشر الستوري المضبوطة لرفع الصور والفيديوهات دون تعارض مع أسماء الحقول
 func postBusinessStory(token, businessConnID, mediaType, fileID string, durationSeconds int, activePeriod string, lang string, excludedIDs []int64) error {
 	if mediaType == "video" && durationSeconds > 60 {
 		return fmt.Errorf(tr(lang, "video_too_long_error"))
@@ -1138,7 +1147,6 @@ func postBusinessStory(token, businessConnID, mediaType, fileID string, duration
 
 	var contentJSON, fileName, fileFieldName string
 
-	// تحديد اسم حقل المرفق بشكل منفصل (photo للصور و video للفيديوهات)
 	if mediaType == "video" {
 		fileName = "story.mp4"
 		fileFieldName = "video"
@@ -1153,14 +1161,12 @@ func postBusinessStory(token, businessConnID, mediaType, fileID string, duration
 		contentJSON = fmt.Sprintf(`{"type":"photo","photo":"attach://%s"}`, fileFieldName)
 	}
 
-	// حقل content يحوي الـ JSON، بينما المرفق سيتم إرساله باسم fileFieldName
 	fields := map[string]string{
 		"business_connection_id": businessConnID,
 		"content":                contentJSON,
 		"active_period":          activePeriod,
 	}
 
-	// إضافة قواعد الخصوصية (Privacy Rules) إذا كانت قائمة الاستثناءات تحتوي على أيدي
 	if len(excludedIDs) > 0 {
 		rules := []map[string]interface{}{
 			{"type": "allow_all"},
