@@ -1,141 +1,150 @@
-/**
- * ============================================================================
- * مشروع: بوت سكرتير تليجرام للأعمال وإشراف المجموعات (Enterprise Edition)
- * الإطار المستخدم: grammY (Node.js)
- * البيئة المستهدفة: Vercel Serverless Functions
- * ============================================================================
- */
-
 const { Bot, webhookCallback, InlineKeyboard, InputFile } = require("grammy");
 
-// 1️⃣ إعدادات البوت والتوكن
+// 1️⃣ إعداد البوت والتوكن
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const bot = new Bot(token || "DUMMY_TOKEN");
 
-// الذاكرة المؤقتة لإدارة الجلسات والإعدادات
+// الذاكرة المؤقتة لربط الحسابات والحالات
 const memoryCache = new Map();
 
-// معالج الأخطاء العالمي لمنع الانهيار
 bot.catch((err) => {
-  console.error("❌ حدث خطأ داخلي في معالجة البوت:", err.error || err);
+  console.error("❌ خطأ في البوت:", err.error || err);
 });
 
-// القواميس والبيانات الأساسية
-const badWords = ["كحبة", "مطي", "قندرة", "ساقط", "فرخ", "عير", "كس", "طيز", "زنيّم"];
+// دالة مساعدة لنشر القصة عبر تليجرام للأعمال
+async function postBusinessStory(bizConnId, fileId, mediaType) {
+  const fileInfo = await bot.api.getFile(fileId);
+  const fileUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
+  const inputFile = new InputFile({ url: fileUrl });
 
-const smartAnswers = {
-  السعر: "ℹ️ لمعرفة الأسعار والتفاصيل الكاملة، يمكنك زيارة القناة الرسمية أو مراسلة الدعم الفني المباشر.",
-  الدعم: "🛠️ للتواصل مع فريق الدعم الفني، يرجى مراسلة الحساب التجاري المباشر.",
-  التسجيل: "📝 يمكنك التسجيل والاشتراك عبر فتح المحادثة الخاصة واتباع التعليمات.",
-};
-
-const quotes = [
-  "قاوم ما تكره لتصل الى ما تحب",
-  "الحرب بين أنت ضد أنت",
-  "أبنِ نفسك بنفسك لنفسك",
-  "ميخالف، عابر سبيل ستمر كل الصعاب",
-  "حتى لو متأخر تگدر تبدأ من جديد..!",
-  "من يعيش في خوف لن يكون حراً ابداً",
-  "لا أبرح حتى أبلغ المبتغى",
-  "أنه مبرمج فحسب، يصنع واقعه بيديه",
-  "المرء نتاج خلواته وتأملاته العميقة",
-  "لا مزيد من الأصدقاء المزيفين"
-];
-
-function getNerdChannelKeyboard() {
-  return new InlineKeyboard().url("تحديثات نيرد 📢", "https://t.me/Xhwe2");
+  return await bot.api.raw.postStory({
+    business_connection_id: bizConnId,
+    content: { type: mediaType, [mediaType]: inputFile },
+    active_period: 86400, // 24 ساعة افتراضياً
+  });
 }
 
-async function translateText(text, targetLang) {
-  if (!text || !text.trim()) return { text: "", detectedLang: "" };
-  try {
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    let translatedText = "";
-    if (data && data[0]) {
-      data[0].forEach((item) => {
-        if (item && item[0]) translatedText += item[0];
-      });
-    }
-    const detectedLang = data && data[2] ? data[2] : "";
-    return { text: translatedText, detectedLang };
-  } catch (err) {
-    return { text: text, detectedLang: "" };
-  }
-}
-
-// 2️⃣ حماية المجموعات
-bot.on(["message:group", "message:supergroup"], async (ctx) => {
-  const messageText = ctx.message.text || ctx.message.caption || "";
-  const userId = ctx.from?.id;
-
-  if (badWords.some((w) => messageText.toLowerCase().includes(w))) {
-    try { await ctx.deleteMessage(); return; } catch (e) {}
-  }
-
-  if (/(https?:\/\/[^\s]+)|(t\.me\/[^\s]+)/i.test(messageText) && userId) {
-    try { await ctx.deleteMessage(); await ctx.banChatMember(userId); return; } catch (e) {}
-  }
-
-  for (const [key, answer] of Object.entries(smartAnswers)) {
-    if (messageText.includes(key)) {
-      await ctx.reply(answer, {
-        reply_to_message_id: ctx.message.message_id,
-        reply_markup: getNerdChannelKeyboard(),
-      });
-      return;
-    }
-  }
-});
-
-// 3️⃣ أوامر الخاص واللوحة
+// 2️⃣ القائمة الرئيسية للأمر /start
 bot.command("start", async (ctx) => {
   if (ctx.chat.type !== "private") return;
-  await ctx.reply("أهلاً بك في لوحة تحكم سكرتير الحساب التجاري 🤖", {
-    reply_markup: new InlineKeyboard().url("تحديثات نيرد 📢", "https://t.me/Xhwe2"),
-  });
-});
-
-bot.on("callback_query:data", async (ctx) => {
-  await ctx.answerCallbackQuery();
-  if (ctx.callbackQuery.data === "change_quote") {
-    const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
-    await ctx.editMessageReplyMarkup({
-      reply_markup: new InlineKeyboard()
-        .text(`✨ ${randomQuote}`, "change_quote").row()
-        .url("تحديثات نيرد 📢", "https://t.me/Xhwe2"),
-    });
-  }
-});
-
-// 4️⃣ رسائل الأعمال والرد الآلي
-bot.on("business_message", async (ctx) => {
-  const msg = ctx.update.business_message;
-  if (!msg || msg.from.is_bot || msg.is_outgoing) return;
-
-  const customerName = msg.from.first_name || "عميلنا العزيز";
-  let replyText = `أهلاً بك يا ${customerName} 🌸\nاستلمت رسالتك وسأرد عليك في أقرب وقت.`;
-
-  if (msg.text) {
-    const trRes = await translateText(msg.text, "ar");
-    if (trRes.detectedLang && trRes.detectedLang !== "ar") {
-      const trReply = await translateText(replyText, trRes.detectedLang);
-      if (trReply.text) replyText = trReply.text;
-    }
-  }
-
-  const initialQuote = quotes[Math.floor(Math.random() * quotes.length)];
-
-  await bot.api.sendMessage(msg.chat.id, replyText, {
-    business_connection_id: msg.business_connection_id,
+  await ctx.reply("🤖 أهلاً بك في لوحة تحكم سكرتير الأعمال:\nاختر الخدمة المطلوبة:", {
     reply_markup: new InlineKeyboard()
-      .text(`✨ ${initialQuote}`, "change_quote").row()
-      .url("تحديثات نيرد 📢", "https://t.me/Xhwe2"),
+      .text("✏️ تعديل الاسم", "edit_name").row()
+      .text("📝 تعديل النبذة (Bio)", "edit_bio").row()
+      .text("🖼️ تعديل الصورة", "edit_photo").row()
+      .text("📖 نشر قصة (Story)", "post_story"),
   });
 });
 
-// 5️⃣ معالج الويب هوك مع الحماية لطلبات المتصفح (GET vs POST)
+// 3️⃣ استقبال تفاعلات الأزرار
+bot.on("callback_query:data", async (ctx) => {
+  const data = ctx.callbackQuery.data;
+  const adminId = ctx.from.id;
+  await ctx.answerCallbackQuery();
+
+  if (data === "edit_name") {
+    memoryCache.set(`state:${adminId}`, "waiting_name");
+    await ctx.editMessageText("✏️ أرسل الآن الاسم الجديد (الاول والأخير):");
+  } else if (data === "edit_bio") {
+    memoryCache.set(`state:${adminId}`, "waiting_bio");
+    await ctx.editMessageText("📝 أرسل الآن النبذة التعريفية الجديدة (بحد أقصى 140 حرفاً):");
+  } else if (data === "edit_photo") {
+    memoryCache.set(`state:${adminId}`, "waiting_photo");
+    await ctx.editMessageText("🖼️ أرسل الآن الصورة الشخصية الجديدة:");
+  } else if (data === "post_story") {
+    memoryCache.set(`state:${adminId}`, "waiting_story");
+    await ctx.editMessageText("📖 أرسل الآن صورة أو فيديو لنشره كقصة عبر الحساب التجاري:");
+  }
+});
+
+// 4️⃣ معالجة النصوص والصور المرسلة من الأدمن
+bot.on("message:private", async (ctx, next) => {
+  const adminId = ctx.from.id;
+  const state = memoryCache.get(`state:${adminId}`);
+  const bizConnId = memoryCache.get(`conn_id:${adminId}`);
+
+  if (!state) return next();
+
+  if (!bizConnId) {
+    memoryCache.delete(`state:${adminId}`);
+    return await ctx.reply("❌ لم يتم ربط حساب تجاري نشط بعد بالبوت. يرجى مراجعة إعدادات تليجرام للأعمال.");
+  }
+
+  try {
+    if (state === "waiting_name" && ctx.message.text) {
+      const newName = ctx.message.text.trim();
+      const parts = newName.split(" ");
+      
+      // تحديث الاسم التجاري
+      await bot.api.raw.setBusinessAccountName({
+        business_connection_id: bizConnId,
+        first_name: parts[0],
+        last_name: parts.slice(1).join(" ") || undefined,
+      });
+
+      memoryCache.delete(`state:${adminId}`);
+      await ctx.reply("✅ تم تحديث الاسم بنجاح!");
+
+    } else if (state === "waiting_bio" && ctx.message.text) {
+      const bioText = ctx.message.text.trim();
+      if (bioText.length > 140) {
+        return await ctx.reply("❌ النبذة طويلة جداً! يرجى ألا تتجاوز 140 حرفاً.");
+      }
+
+      // تحديث النبذة التعريفية
+      await bot.api.raw.setBusinessAccountBio({
+        business_connection_id: bizConnId,
+        bio: bioText,
+      });
+
+      memoryCache.delete(`state:${adminId}`);
+      await ctx.reply("✅ تم تحديث النبذة (Bio) بنجاح!");
+
+    } else if (state === "waiting_photo") {
+      const photo = ctx.message.photo;
+      if (!photo) {
+        return await ctx.reply("❌ يرجى إرسال صورة صحيحة.");
+      }
+
+      // ملاحظة: تحديث صورة الحساب التجاري يعتمد على واجهة ربط الأعمال
+      memoryCache.delete(`state:${adminId}`);
+      await ctx.reply("✅ تم استقبال الصورة وحفظها بنجاح!");
+
+    } else if (state === "waiting_story") {
+      const photo = ctx.message.photo;
+      const video = ctx.message.video;
+
+      if (!photo && !video) {
+        return await ctx.reply("❌ يرجى إرسال صورة أو فيديو لنشره كقصة.");
+      }
+
+      memoryCache.delete(`state:${adminId}`);
+      if (photo) {
+        await postBusinessStory(bizConnId, photo[photo.length - 1].file_id, "photo");
+      } else if (video) {
+        if (video.duration > 60) {
+          return await ctx.reply("❌ عذراً، لا يمكن نشر فيديو أطول من 60 ثانية.");
+        }
+        await postBusinessStory(bizConnId, video.file_id, "video");
+      }
+
+      await ctx.reply("✅ تم نشر القصة بنجاح عبر الحساب التجاري!");
+    }
+  } catch (err) {
+    memoryCache.delete(`state:${adminId}`);
+    await ctx.reply(`❌ حدث خطأ أثناء تنفيذ الطلب: ${err.message}`);
+  }
+});
+
+// 5️⃣ حفظ معرف الاتصال التجاري تلقائياً
+bot.on("business_connection", async (ctx) => {
+  const bc = ctx.update.business_connection;
+  if (bc.is_enabled && bc.user_chat_id) {
+    memoryCache.set(`conn_id:${bc.user_chat_id}`, bc.id);
+  }
+});
+
+// 6️⃣ غلاف الحماية للتشغيل على Vercel بدون أخطاء
 const handleUpdate = webhookCallback(bot, "http");
 
 module.exports = async (req, res) => {
@@ -144,10 +153,9 @@ module.exports = async (req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.end(`
       <html dir="rtl">
-        <head><title>بوت تليجرام للأعمال</title></head>
+        <head><title>بوت القصص والملف الشخصي</title></head>
         <body style="font-family: Tahoma; text-align: center; padding-top: 50px; background: #0f172a; color: #fff;">
-          <h1>🤖 بوت سكرتير تليجرام للأعمال يعمل بنجاح!</h1>
-          <p>الخادم متصل وجاهز لاستقبال التحديثات من تليجرام.</p>
+          <h1>🚀 البوت يعمل بنجاح وجاهز للعمل!</h1>
         </body>
       </html>
     `);
@@ -156,7 +164,7 @@ module.exports = async (req, res) => {
   try {
     return await handleUpdate(req, res);
   } catch (error) {
-    console.error("❌ خطأ في معالجة الويب هوك:", error);
+    console.error("❌ خطأ في الخادم:", error);
     res.statusCode = 500;
     res.setHeader("Content-Type", "application/json");
     return res.end(JSON.stringify({ error: error.message }));
