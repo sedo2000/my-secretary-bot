@@ -881,4 +881,154 @@ app.get('/api/stats', async (req, res) => {
         warnings: userWarnings.size,
         memory: process.memoryUsage()
       },
-     
+      webhook: {
+        url: webhookInfo.url,
+        pending: webhookInfo.pending_update_count
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// معالج الأخطاء العالمي
+app.use((err, req, res, next) => {
+  console.error('❌ خطأ في الخادم:', err);
+  res.status(500).json({ 
+    error: 'حدث خطأ داخلي في الخادم',
+    message: err.message 
+  });
+});
+
+// ============================================================
+// 📤 8. تصدير الوظيفة الرئيسية لـ Vercel
+// ============================================================
+
+module.exports = app;
+
+// ============================================================
+// 📡 9. تعيين Webhook (يتم تشغيله مرة واحدة)
+// ============================================================
+
+async function setupWebhook() {
+  try {
+    const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://your-app.vercel.app/api/webhook';
+    
+    console.log('🔄 جاري تعيين Webhook...');
+    
+    // حذف أي Webhook قديم
+    await bot.api.deleteWebhook();
+    console.log('✅ تم حذف Webhook القديم');
+    
+    // تعيين Webhook جديد
+    const result = await bot.api.setWebhook(WEBHOOK_URL, {
+      allowed_updates: [
+        'message',
+        'edited_message',
+        'callback_query',
+        'business_connection',
+        'business_message',
+        'deleted_business_messages',
+        'managed_bot',
+        'chat_member',
+        'my_chat_member'
+      ],
+      drop_pending_updates: true
+    });
+    
+    if (result) {
+      console.log('✅ Webhook تم تعيينه بنجاح');
+      console.log(`🌐 الرابط: ${WEBHOOK_URL}`);
+      
+      // جلب معلومات البوت
+      const me = await bot.api.getMe();
+      console.log(`🤖 البوت: @${me.username}`);
+      console.log(`🆔 معرف البوت: ${me.id}`);
+      
+      // جلب معلومات Webhook للتأكيد
+      const webhookInfo = await bot.api.getWebhookInfo();
+      console.log(`📊 حالة Webhook: ${webhookInfo.url ? '🟢 مفعل' : '🔴 غير مفعل'}`);
+      
+      if (webhookInfo.url) {
+        console.log(`📡 الرابط النشط: ${webhookInfo.url}`);
+        console.log(`⏳ معلقين: ${webhookInfo.pending_update_count}`);
+      }
+    } else {
+      console.error('❌ فشل تعيين Webhook');
+    }
+    
+  } catch (error) {
+    console.error('❌ فشل تعيين Webhook:', error);
+    console.error('📝 التفاصيل:', error.message);
+    if (error.response) {
+      console.error('📤 استجابة API:', error.response.data);
+    }
+  }
+}
+
+// تشغيل إعداد Webhook عند بدء التشغيل
+if (require.main === module) {
+  console.log('🚀 بدء تشغيل البوت...');
+  setupWebhook();
+  
+  // بدء الخادم المحلي للاختبار
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`🌐 الخادم يعمل على المنفذ ${PORT}`);
+    console.log(`🔗 الرابط المحلي: http://localhost:${PORT}/api`);
+  });
+}
+
+// ============================================================
+// 📝 10. معلومات التشغيل والملاحظات
+// ============================================================
+/*
+🔧 إعدادات BotFather المطلوبة:
+1. /setprivacy -> Disable (لقراءة جميع الرسائل)
+2. /setjoingroups -> Enable (للانضمام للمجموعات)
+3. /mybots -> اختر البوت -> Bot Settings -> Secretary Mode -> Enable
+4. /mybots -> اختر البوت -> Bot Settings -> Inline Mode -> Disable
+
+📱 إعدادات تليجرام للأعمال:
+1. افتح Settings -> Telegram Business
+2. اختر Chat Assistant -> حدد البوت
+3. فعّل Reply to Messages
+4. اختر All Chats
+5. فعّل Auto-Reply للرسائل الجديدة
+
+⚠️ ملاحظات الأمان:
+- احفظ المتغيرات البيئية بشكل آمن
+- استخدم HTTPS للـ Webhook
+- قم بتحديث قوائم الكلمات الممنوعة بانتظام
+- راقب سجلات الأخطاء بشكل دوري
+
+📊 الأداء:
+- يستخدم التخزين المؤقت لتقليل طلبات الترجمة
+- يدعم مئات المستخدمين في وقت واحد
+- يعمل بكفاءة على بيئة Vercel Serverless
+
+🆓 الترجمة المجانية:
+- يستخدم @vitalets/google-translate-api بدون API Key
+- يدعم أكثر من 100 لغة
+- مع تخزين مؤقت لتقليل الطلبات
+
+📌 الميزات الرئيسية:
+✅ رد تلقائي خاص مع ترجمة فورية
+✅ حماية المجموعات من السبام والإعلانات
+✅ رد آلي على الكلمات المفتاحية
+✅ حفظ واسترجاع الوسائط المحذوفة
+✅ إدارة الملف الشخصي والقصص
+✅ إحصائيات تفاعل الأعضاء
+✅ أوامر متكاملة للإدارة
+
+💡 نصائح للاستخدام:
+- قم بتحديث قوائم الكلمات الممنوعة بانتظام
+- راقب سجلات الأخطاء لتحسين الأداء
+- استخدم أوامر الإدارة بمسؤولية
+- قم بعمل نسخ احتياطي للبيانات المهمة
+*/
+
+// ============================================================
+// 🏁 نهاية الكود
+// ============================================================
