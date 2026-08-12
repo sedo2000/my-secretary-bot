@@ -28,28 +28,15 @@ async function getCache(key) {
   return memoryCache.get(key);
 }
 
-// 2️⃣ محرك الترجمة الفورية عبر Google Translate API
-async function translateText(text, targetLang) {
-  if (!text || !text.trim()) return { text: "", detectedLang: "" };
-  try {
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    let translatedText = "";
-    if (data && data[0]) {
-      data[0].forEach((item) => {
-        if (item && item[0]) translatedText += item[0];
-      });
-    }
-    const detectedLang = data && data[2] ? data[2] : "";
-    return { text: translatedText, detectedLang };
-  } catch (err) {
-    console.error("خطأ في الترجمة:", err);
-    return { text: text, detectedLang: "" };
-  }
-}
+// 2️⃣ القواميس والبيانات الأساسية (الكلمات المسيئة، الردود الذكية، والاقتباسات)
+const badWords = ["كحبة", "مطي", "قندرة", "ساقط", "فرخ", "عير", "كس", "طيز", "زنيّم"];
 
-// قائمة الاقتباسات التفاعلية
+const smartAnswers = {
+  السعر: "ℹ️ لمعرفة الأسعار والتفاصيل الكاملة، يمكنك زيارة القناة الرسمية أو مراسلة الدعم.",
+  الدعم: "🛠️ للتواصل مع الدعم الفني، يرجى مراسلة الحساب التجاري المباشر.",
+  التسجيل: "📝 يمكنك التسجيل والاشتراك عبر فتح المحادثة الخاصة وتتبع التعليمات.",
+};
+
 const quotes = [
   "قاوم ما تكره لتصل الى ما تحب",
   "الحرب بين أنت ضد أنت",
@@ -63,14 +50,14 @@ const quotes = [
   "لا مزيد من الأصدقاء المزيفين",
 ];
 
-// قاموس اللغات
+// قاموس اللغات (العربية والإنكليزية)
 const i18n = {
   ar: {
     welcome: "أهلاً بك في لوحة تحكم سكرتير الحساب التجاري 🤖\nاختر من الأزرار أدناه للتحكم الكامل:",
     main_menu: "القائمة الرئيسية 🤖:",
-    stop_btn: "🛑 إيقاف الرد",
-    start_btn: "🟢 تشغيل الرد",
-    edit_text_btn: "📝 تعديل نص الرد",
+    stop_btn: "🛑 إيقاف الرد الخاص",
+    start_btn: "🟢 تشغيل الرد الخاص",
+    edit_text_btn: "📝 تعديل نص الرد الخاص",
     exclude_btn: "👤 استثناء حساب",
     list_excluded_btn: "📋 عرض المستثنين",
     clear_excluded_btn: "🧹 مسح المستثنين",
@@ -79,9 +66,9 @@ const i18n = {
     lang_ar_btn: "🇮🇶 العربية",
     lang_en_btn: "🇺🇸 English",
     back_btn: "🔙 رجوع",
-    stopped: "🛑 تم إيقاف الرد التلقائي بنجاح.",
-    started: "🟢 تم تشغيل الرد التلقائي بنجاح.",
-    edit_prompt: "📝 أرسل الآن نص الرد التلقائي الجديد:",
+    stopped: "🛑 تم إيقاف الرد التلقائي الخاص بنجاح.",
+    started: "🟢 تم تشغيل الرد التلقائي الخاص بنجاح.",
+    edit_prompt: "📝 أرسل الآن نص الرد التلقائي الجديد للخاص:",
     saved_text: "✅ تم حفظ نص الرد التلقائي الجديد بنجاح!",
     exclude_prompt: "👤 أرسل ايدي (ID) الحساب المراد استثناؤه:",
     id_added: "✅ تم إضافة الايدي إلى قائمة الاستثناء.",
@@ -148,6 +135,26 @@ function t(lang, key) {
   return i18n[l][key] || key;
 }
 
+// 3️⃣ محرك الترجمة الفورية عبر Google Translate API
+async function translateText(text, targetLang) {
+  if (!text || !text.trim()) return { text: "", detectedLang: "" };
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    let translatedText = "";
+    if (data && data[0]) {
+      data[0].forEach((item) => {
+        if (item && item[0]) translatedText += item[0];
+      });
+    }
+    const detectedLang = data && data[2] ? data[2] : "";
+    return { text: translatedText, detectedLang };
+  } catch (err) {
+    return { text: text, detectedLang: "" };
+  }
+}
+
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const bot = new Bot(token);
 
@@ -160,7 +167,12 @@ async function saveAdminConfig(adminId, config) {
   await setCache(`config:${adminId}`, config, 30 * 86400);
 }
 
-// دالة مساعدة لنشر القصة مباشرة عبر Telegram Bot API Form-Data
+// زر الشفاف لقناة تحديثات نيرد
+function getNerdChannelKeyboard() {
+  return new InlineKeyboard().url("تحديثات نيرد 📢", "https://t.me/Xhwe2");
+}
+
+// دالة نشر القصص عبر API
 async function postBusinessStory(bizConnId, fileId, mediaType, activePeriod, duration = 0) {
   const fileInfo = await bot.api.getFile(fileId);
   const fileUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
@@ -185,7 +197,7 @@ async function postBusinessStory(bizConnId, fileId, mediaType, activePeriod, dur
   return await apiRes.json();
 }
 
-// دالة مساعدة لتحديث صورة البروفايل مباشرة عبر Telegram Bot API
+// دالة تحديث صورة البروفايل عبر API
 async function setBusinessProfilePhoto(bizConnId, fileId) {
   const fileInfo = await bot.api.getFile(fileId);
   const fileUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
@@ -204,7 +216,7 @@ async function setBusinessProfilePhoto(bizConnId, fileId) {
   return await apiRes.json();
 }
 
-// استخراج كافة أنواع وسائط تليجرام الممكنة
+// استخراج وسائط الرسائل
 function extractMediaInfo(msg) {
   const info = {
     fromId: msg.from.id,
@@ -247,7 +259,7 @@ function extractMediaInfo(msg) {
   return info;
 }
 
-// إعادة إرسال الوسائط بمختلف أنواعها للأدمن
+// إعادة إرسال الوسائط للأدمن عند الحذف أو النسخ الاحتياطي
 async function sendMediaToAdmin(adminId, media, headerText) {
   const caption = `${headerText}\n\n` + (media.caption ? `💬 الشرح: ${media.caption}` : "");
   try {
@@ -283,11 +295,11 @@ async function sendMediaToAdmin(adminId, media, headerText) {
         break;
     }
   } catch (err) {
-    console.error("خطأ إعادة إرسال الوسائط المحذوفة:", err);
+    console.error("خطأ إعادة إرسال الوسائط:", err);
   }
 }
 
-// لوحات التحكم بالأزرار (Keyboards)
+// لوحات التحكم بالأزرار (Inline Keyboards)
 function getMainMenuKeyboard(lang) {
   return new InlineKeyboard()
     .text(t(lang, "stop_btn"), "action_stop").text(t(lang, "start_btn"), "action_start").row()
@@ -295,7 +307,8 @@ function getMainMenuKeyboard(lang) {
     .text(t(lang, "exclude_btn"), "action_exclude").text(t(lang, "list_excluded_btn"), "action_list_excluded").row()
     .text(t(lang, "clear_excluded_btn"), "action_clear_excluded").row()
     .text(t(lang, "profile_btn"), "menu_profile").text(t(lang, "story_btn"), "menu_story").row()
-    .text(t(lang, "lang_ar_btn"), "lang_ar").text(t(lang, "lang_en_btn"), "lang_en");
+    .text(t(lang, "lang_ar_btn"), "lang_ar").text(t(lang, "lang_en_btn"), "lang_en").row()
+    .url("تحديثات نيرد 📢", "https://t.me/Xhwe2");
 }
 
 function getProfileKeyboard(lang) {
@@ -318,8 +331,63 @@ function getBackKeyboard(lang) {
   return new InlineKeyboard().text(t(lang, "back_btn"), "menu_main");
 }
 
-// الأوامر الرئيسية
+// 4️⃣ الإشراف التلقائي، منع السبام، والردود في المجموعات (Group Moderation)
+bot.on(["message:group", "message:supergroup"], async (ctx) => {
+  const messageText = ctx.message.text || ctx.message.caption || "";
+  const chatId = ctx.chat.id;
+  const userId = ctx.from.id;
+
+  // أ) جمع البيانات وإحصائيات رسائل الأعضاء (Analytics)
+  if (redis && userId) {
+    await redis.incr(`stats:msg_count:${chatId}:${userId}`);
+  }
+
+  // ب) رصد وحظر الكلمات البذيئة
+  const containsBadWord = badWords.some((word) => messageText.toLowerCase().includes(word));
+  if (containsBadWord) {
+    try {
+      await ctx.deleteMessage();
+      return;
+    } catch (e) {
+      console.error("خطأ في حذف الكلمة البذيئة:", e);
+    }
+  }
+
+  // ج) كشف ومنع الإعلانات والروابط (Spam Protection)
+  const hasLink = /(https?:\/\/[^\s]+)|(t\.me\/[^\s]+)|(telegram\.me\/[^\s]+)/i.test(messageText);
+  if (hasLink) {
+    try {
+      await ctx.deleteMessage();
+      await ctx.banChatMember(userId);
+      return;
+    } catch (e) {
+      console.error("خطأ حظر مرسل السبام:", e);
+    }
+  }
+
+  // د) الرد الآلي الذكي على الكلمات المفتاحية
+  for (const [key, answer] of Object.entries(smartAnswers)) {
+    if (messageText.includes(key)) {
+      await ctx.reply(answer, {
+        reply_to_message_id: ctx.message.message_id,
+        reply_markup: getNerdChannelKeyboard(),
+      });
+      return;
+    }
+  }
+
+  // هـ) عند الرد على رسالة في المجموعات -> إرفاق زر شفاف يحتوي على "تحديثات نيرد"
+  if (ctx.message.reply_to_message) {
+    await ctx.reply("تابع جديدنا عبر قناة التحديثات الرسمية:", {
+      reply_to_message_id: ctx.message.message_id,
+      reply_markup: getNerdChannelKeyboard(),
+    });
+  }
+});
+
+// 5️⃣ أوامر وتفاعلات لوحة التحكم للأدمن في الخاص
 bot.command("start", async (ctx) => {
+  if (ctx.chat.type !== "private") return;
   const cfg = await getAdminConfig(ctx.from.id);
   await ctx.reply(t(cfg.lang, "welcome"), {
     reply_markup: getMainMenuKeyboard(cfg.lang),
@@ -330,7 +398,6 @@ bot.command("id", async (ctx) => {
   await ctx.reply(`آيدي حسابك هو:\n\`${ctx.from.id}\``, { parse_mode: "Markdown" });
 });
 
-// التعامل مع الضغط على الأزرار
 bot.on("callback_query:data", async (ctx) => {
   const data = ctx.callbackQuery.data;
   const adminId = ctx.from.id;
@@ -341,7 +408,9 @@ bot.on("callback_query:data", async (ctx) => {
   if (data === "change_quote") {
     const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
     await ctx.editMessageReplyMarkup({
-      reply_markup: new InlineKeyboard().text(`✨ ${randomQuote}`, "change_quote"),
+      reply_markup: new InlineKeyboard()
+        .text(`✨ ${randomQuote}`, "change_quote").row()
+        .url("تحديثات نيرد 📢", "https://t.me/Xhwe2"),
     });
     return;
   }
@@ -444,7 +513,7 @@ bot.on("callback_query:data", async (ctx) => {
   }
 });
 
-// تنفيذ خيارات تعديل الملف الشخصي ونشر القصص النافذة
+// التعامل مع مدخلات الأدمن في المحادثة الخاصة
 bot.on("message", async (ctx, next) => {
   if (ctx.update.business_message) return next();
 
@@ -453,7 +522,6 @@ bot.on("message", async (ctx, next) => {
 
   if (!cfg.state) return next();
 
-  // 1. تعديل نص الرد التلقائي
   if (cfg.state === "waiting_text") {
     cfg.autoReply = ctx.message.text;
     cfg.state = "";
@@ -461,9 +529,7 @@ bot.on("message", async (ctx, next) => {
     await ctx.reply(t(cfg.lang, "saved_text"), {
       reply_markup: getMainMenuKeyboard(cfg.lang),
     });
-  } 
-  // 2. استثناء حساب
-  else if (cfg.state === "waiting_exclude_id") {
+  } else if (cfg.state === "waiting_exclude_id") {
     const exId = parseInt(ctx.message.text.trim());
     if (!isNaN(exId)) {
       if (!cfg.excluded.includes(exId)) cfg.excluded.push(exId);
@@ -473,9 +539,7 @@ bot.on("message", async (ctx, next) => {
         reply_markup: getMainMenuKeyboard(cfg.lang),
       });
     }
-  } 
-  // 3. تعديل بيانات البروفايل (اسم، نبذة، يوزر، صورة)
-  else if (cfg.state.startsWith("waiting_prof_")) {
+  } else if (cfg.state.startsWith("waiting_prof_")) {
     const field = cfg.state.replace("waiting_prof_", "");
     try {
       if (field === "name") {
@@ -497,7 +561,7 @@ bot.on("message", async (ctx, next) => {
         });
       } else if (field === "photo") {
         if (!ctx.message.photo) {
-          await ctx.reply("❌ أرسل صورة فعلية لتحديث صورة الملف الشخصي.");
+          await ctx.reply("❌ أرسل صورة لتحديث صورة الملف الشخصي.");
           return;
         }
         const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
@@ -511,15 +575,13 @@ bot.on("message", async (ctx, next) => {
     } catch (err) {
       await ctx.reply(`❌ فشل تحديث البيانات: ${err.message}`);
     }
-  } 
-  // 4. تنفيذ نشر القصة (Story)
-  else if (cfg.state.startsWith("waiting_story_")) {
+  } else if (cfg.state.startsWith("waiting_story_")) {
     const activePeriod = parseInt(cfg.state.replace("waiting_story_", ""));
     const photo = ctx.message.photo;
     const video = ctx.message.video;
 
     if (!photo && !video) {
-      await ctx.reply("❌ يرجى إرسال صورة أو مقطع فيديو لنشره كقصة.");
+      await ctx.reply("❌ يرجى إرسال صورة أو فيديو لنشره كقصة.");
       return;
     }
 
@@ -529,7 +591,7 @@ bot.on("message", async (ctx, next) => {
         await postBusinessStory(cfg.businessConnId, fileId, "photo", activePeriod);
       } else if (video) {
         if (video.duration > 60) {
-          await ctx.reply("❌ الفيديو أطول من 60 ثانية، الحد الأقصى المسموح للقصص هو دقيقة واحدة.");
+          await ctx.reply("❌ الفيديو أطول من 60 ثانية.");
           return;
         }
         await postBusinessStory(cfg.businessConnId, video.file_id, "video", activePeriod, video.duration);
@@ -545,7 +607,7 @@ bot.on("message", async (ctx, next) => {
   }
 });
 
-// 3️⃣ التعامل مع البوتات المُدارة (Managed Bots) وجلب التوكن
+// 6️⃣ التعامل مع البوتات المُدارة (Managed Bots)
 bot.on("managed_bot", async (ctx) => {
   const mb = ctx.update.managed_bot;
   try {
@@ -553,10 +615,10 @@ bot.on("managed_bot", async (ctx) => {
     const adminId = mb.user.id;
     await bot.api.sendMessage(
       adminId,
-      `🤖 *تم إنشاء وتفويض بوت فرعي جديد بنجاح!*\n\n` +
-      `👤 اسم البوت: ${mb.bot.first_name}\n` +
+      `🤖 *تم إنشاء بوت فرعي جديد!*\n\n` +
+      `👤 الاسم: ${mb.bot.first_name}\n` +
       `🔗 اليوزر: @${mb.bot.username}\n` +
-      `🔑 التوكن الخاص به: \`${tokenRes.token}\``,
+      `🔑 التوكن: \`${tokenRes.token}\``,
       { parse_mode: "Markdown" }
     );
   } catch (err) {
@@ -564,42 +626,33 @@ bot.on("managed_bot", async (ctx) => {
   }
 });
 
-// 4️⃣ ربط الحساب التجاري وإرسال تنبيه للمطور
+// 7️⃣ ربط الحساب التجاري
 bot.on("business_connection", async (ctx) => {
   const bc = ctx.update.business_connection;
   if (bc.is_enabled && bc.user_chat_id) {
     const cfg = await getAdminConfig(bc.user_chat_id);
     cfg.businessConnId = bc.id;
     await saveAdminConfig(bc.user_chat_id, cfg);
-
     await setCache(`conn:${bc.id}`, bc.user_chat_id, 365 * 86400);
 
     const devId = process.env.DEVELOPER_CHAT_ID;
     if (devId) {
       await bot.api.sendMessage(
         devId,
-        `🔔 *تفعيل جديد لسكرتير الأعمال!*\n\n👤 المستخدم: ${bc.user.first_name} (${bc.user.username ? "@" + bc.user.username : "-"})\n🆔 الايدي: \`${bc.user.id}\``,
+        `🔔 *تفعيل جديد لسكرتير الأعمال!*\n\n👤 المستخدم: ${bc.user.first_name}\n🆔 الايدي: \`${bc.user.id}\``,
         { parse_mode: "Markdown" }
       );
     }
   }
 });
 
-// 5️⃣ المحرك الرئيسي لـ "وضع السكرتير" والرد على رسائل العمل التجاري
+// 8️⃣ الرد الخاص في محادثات العملاء والتراسل التجاري (Business Message)
 bot.on("business_message", async (ctx) => {
   const msg = ctx.update.business_message;
   const connId = msg.business_connection_id;
 
-  // الحماية من الحلقات التكرارية للاتصال بين البوتات (Bot-to-Bot Loop Safeguard)
   if (msg.from.is_bot) return;
 
-  // كبح المعدل (Rate Limiting) لمنع الإغراق
-  const rateKey = `ratelimit:${msg.chat.id}`;
-  const recentCount = (await getCache(rateKey)) || 0;
-  if (recentCount > 5) return;
-  await setCache(rateKey, recentCount + 1, 10);
-
-  // استخراج الوسائط للنسخ الاحتياطي والكاش
   const mediaInfo = extractMediaInfo(msg);
   const cacheKey = `msg:${msg.chat.id}:${msg.message_id}`;
   await setCache(cacheKey, mediaInfo, 7 * 86400);
@@ -609,7 +662,7 @@ bot.on("business_message", async (ctx) => {
 
   const cfg = await getAdminConfig(adminId);
 
-  // حفظ الوسائط الواردة ذاتية التدمير (TTL Media Backup)
+  // نسخ الاحتياط للوسائط ذاتية التدمير
   if (!msg.is_outgoing && mediaInfo.type !== "text") {
     const header = t(cfg.lang, "ttl_media_alert")
       .replace("%s", mediaInfo.fromName)
@@ -617,7 +670,7 @@ bot.on("business_message", async (ctx) => {
     await sendMediaToAdmin(adminId, mediaInfo, header);
   }
 
-  // تجنب الرد التلقائي على الرسائل الصادرة أو عند الإيقاف أو الحسابات المستثناة
+  // تجنب الرد التلقائي على الرسائل الصادرة أو عند الإيقاف
   if (msg.is_outgoing || cfg.isStopped || cfg.excluded.includes(msg.from.id)) {
     return;
   }
@@ -631,14 +684,14 @@ bot.on("business_message", async (ctx) => {
     translatedText = trRes.text;
 
     if (detectedLang && detectedLang !== "ar") {
-      const alertMsg = `🌐 *رسالة جديدة بلغة مترجمة (` + detectedLang + `)*\n👤 *العميل:* ` + mediaInfo.fromName + ` (\`${msg.from.id}\`)\n\n💬 *الأصل:*\n` + msg.text + `\n\n✨ *الترجمة للعربية:*\n` + translatedText;
+      const alertMsg = `🌐 *رسالة بلغة مترجمة (` + detectedLang + `)*\n👤 *العميل:* ` + mediaInfo.fromName + ` (\`${msg.from.id}\`)\n\n💬 *الأصل:*\n` + msg.text + `\n\n✨ *الترجمة:*\n` + translatedText;
       await bot.api.sendMessage(adminId, alertMsg, { parse_mode: "Markdown" });
     }
   }
 
-  // صياغة الرد الآلي
-  const customerName = msg.from.first_name || "صديقي";
-  let replyText = cfg.autoReply || "أهلاً بك يا {name} 🌸\nأنا غير متوفر الآن، استلمت رسالتك وسأرد عليك قريباً.";
+  // صياغة الرد الآلي للعميل في الخاص
+  const customerName = msg.from.first_name || "عميلنا العزيز";
+  let replyText = cfg.autoReply || "أهلاً بك يا {name} 🌸\nاستلمت رسالتك وسأرد عليك في أقرب وقت.";
   replyText = replyText.replace("{name}", customerName).replace("{الاسم}", customerName);
 
   if (detectedLang && detectedLang !== "ar") {
@@ -650,11 +703,13 @@ bot.on("business_message", async (ctx) => {
 
   await bot.api.sendMessage(msg.chat.id, replyText, {
     business_connection_id: connId,
-    reply_markup: new InlineKeyboard().text(`✨ ${initialQuote}`, "change_quote"),
+    reply_markup: new InlineKeyboard()
+      .text(`✨ ${initialQuote}`, "change_quote").row()
+      .url("تحديثات نيرد 📢", "https://t.me/Xhwe2"),
   });
 });
 
-// 6️⃣ كشف المحذوفات واسترجاع كافة أنواع الوسائط للأدمن
+// 9️⃣ كشف واسترجاع المحذوفات للأدمن
 bot.on("deleted_business_messages", async (ctx) => {
   const dbm = ctx.update.deleted_business_messages;
   const adminId = await getCache(`conn:${dbm.business_connection_id}`);
@@ -675,5 +730,5 @@ bot.on("deleted_business_messages", async (ctx) => {
   }
 });
 
-// تصدير المعالج لـ Vercel
+// تصدير المعالج لبيئة Vercel
 module.exports = webhookCallback(bot, "http");
