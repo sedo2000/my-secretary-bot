@@ -1144,7 +1144,7 @@ func setBusinessAccountProfilePhoto(token, businessConnID, fileID string) error 
 		return err
 	}
 
-,	photoJSON := `{"type":"static","photo":"attach://photo"}`
+	photoJSON := `{"type":"static","photo":"attach://photo"}`
 	fields := map[string]string{
 		"business_connection_id": businessConnID,
 		"photo":                  photoJSON,
