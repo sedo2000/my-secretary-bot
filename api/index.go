@@ -1,241 +1,162 @@
-package handler
+const { Bot, webhookCallback, InlineKeyboard, InputFile } = require("grammy");
 
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"os"
-	"sync"
-)
+// 1️⃣ إعداد البوت والتوكن
+const token = process.env.TELEGRAM_BOT_TOKEN;
+const bot = new Bot(token || "DUMMY_TOKEN");
 
-// تخزين مؤقت للربط والحالات
-var (
-	mutex        sync.Mutex
-	businessConns = make(map[int64]string) // adminId -> businessConnectionId
-	userStates   = make(map[int64]string)  // adminId -> state
-)
+// الذاكرة المؤقتة لربط الحسابات والحالات
+const memoryCache = new Map();
 
-type TelegramUpdate struct {
-	UpdateID          int64               `json:"update_id"`
-	Message           *Message            `json:"message"`
-	CallbackQuery     *CallbackQuery      `json:"callback_query"`
-	BusinessConnection *BusinessConnection `json:"business_connection"`
+bot.catch((err) => {
+  console.error("❌ خطأ في البوت:", err.error || err);
+});
+
+// دالة مساعدة لنشر القصة عبر تليجرام للأعمال
+async function postBusinessStory(bizConnId, fileId, mediaType) {
+  const fileInfo = await bot.api.getFile(fileId);
+  const fileUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
+  const inputFile = new InputFile({ url: fileUrl });
+
+  return await bot.api.raw.postStory({
+    business_connection_id: bizConnId,
+    content: { type: mediaType, [mediaType]: inputFile },
+    active_period: 86400, // 24 ساعة افتراضياً
+  });
 }
 
-type Message struct {
-	MessageID int64   `json:"message_id"`
-	From      *User   `json:"from"`
-	Chat      Chat    `json:"chat"`
-	Text      string  `json:"text"`
-	Photo     []Photo `json:"photo"`
-}
+// 2️⃣ القائمة الرئيسية للأمر /start
+bot.command("start", async (ctx) => {
+  if (ctx.chat.type !== "private") return;
+  await ctx.reply("🤖 أهلاً بك في لوحة تحكم سكرتير الأعمال:\nاختر الخدمة المطلوبة:", {
+    reply_markup: new InlineKeyboard()
+      .text("✏️ تعديل الاسم", "edit_name").row()
+      .text("📝 تعديل النبذة (Bio)", "edit_bio").row()
+      .text("🖼️ تعديل الصورة", "edit_photo").row()
+      .text("📖 نشر قصة (Story)", "post_story"),
+  });
+});
 
-type User struct {
-	ID        int64  `json:"id"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Username  string `json:"username"`
-}
+// 3️⃣ استقبال تفاعلات الأزرار
+bot.on("callback_query:data", async (ctx) => {
+  const data = ctx.callbackQuery.data;
+  const adminId = ctx.from.id;
+  await ctx.answerCallbackQuery();
 
-type Chat struct {
-	ID   int64  `json:"id"`
-	Type string `json:"type"`
-}
+  if (data === "edit_name") {
+    memoryCache.set(`state:${adminId}`, "waiting_name");
+    await ctx.editMessageText("✏️ أرسل الآن الاسم الجديد (الاول والأخير):");
+  } else if (data === "edit_bio") {
+    memoryCache.set(`state:${adminId}`, "waiting_bio");
+    await ctx.editMessageText("📝 أرسل الآن النبذة التعريفية الجديدة (بحد أقصى 140 حرفاً):");
+  } else if (data === "edit_photo") {
+    memoryCache.set(`state:${adminId}`, "waiting_photo");
+    await ctx.editMessageText("🖼️ أرسل الآن الصورة الشخصية الجديدة:");
+  } else if (data === "post_story") {
+    memoryCache.set(`state:${adminId}`, "waiting_story");
+    await ctx.editMessageText("📖 أرسل الآن صورة أو فيديو لنشره كقصة عبر الحساب التجاري:");
+  }
+});
 
-type CallbackQuery struct {
-	ID      string   `json:"id"`
-	From    User     `json:"from"`
-	Data    string   `json:"data"`
-	Message *Message `json:"message"`
-}
+// 4️⃣ معالجة النصوص والصور المرسلة من الأدمن
+bot.on("message:private", async (ctx, next) => {
+  const adminId = ctx.from.id;
+  const state = memoryCache.get(`state:${adminId}`);
+  const bizConnId = memoryCache.get(`conn_id:${adminId}`);
 
-type BusinessConnection struct {
-	ID          string `json:"id"`
-	UserChatID  int64  `json:"user_chat_id"`
-	IsEnabled   bool   `json:"is_enabled"`
-}
+  if (!state) return next();
 
-type Photo struct {
-	FileID string `json:"file_id"`
-}
+  if (!bizConnId) {
+    memoryCache.delete(`state:${adminId}`);
+    return await ctx.reply("❌ لم يتم ربط حساب تجاري نشط بعد بالبوت. يرجى مراجعة إعدادات تليجرام للأعمال.");
+  }
 
-// دالة إرسال رسالة نصية مع أزرار شفافة
-func sendMessage(token string, chatId int64, text string, replyMarkup interface{}) {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
-	payload := map[string]interface{}{
-		"chat_id":      chatId,
-		"text":         text,
-		"parse_mode":   "Markdown",
-		"reply_markup": replyMarkup,
-	}
-	jsonBody, _ := json.Marshal(payload)
-	http.Post(url, "application/json", bytes.NewBuffer(jsonBody))
-}
+  try {
+    if (state === "waiting_name" && ctx.message.text) {
+      const newName = ctx.message.text.trim();
+      const parts = newName.split(" ");
+      
+      await bot.api.raw.setBusinessAccountName({
+        business_connection_id: bizConnId,
+        first_name: parts[0],
+        last_name: parts.slice(1).join(" ") || undefined,
+      });
 
-// دالة الرد على الكอลباك كويري
-func answerCallbackQuery(token string, callbackQueryId string) {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/answerCallbackQuery", token)
-	payload := map[string]interface{}{"callback_query_id": callbackQueryId}
-	jsonBody, _ := json.Marshal(payload)
-	http.Post(url, "application/json", bytes.NewBuffer(jsonBody))
-}
+      memoryCache.delete(`state:${adminId}`);
+      await ctx.reply("✅ تم تحديث الاسم بنجاح!");
 
-// Handler الرئيسي لـ Vercel
-func Handler(w http.ResponseWriter, r *http.Request) {
-	token := os.Getenv("TELEGRAM_BOT_TOKEN")
+    } else if (state === "waiting_bio" && ctx.message.text) {
+      const bioText = ctx.message.text.trim();
+      if (bioText.length > 140) {
+        return await ctx.reply("❌ النبذة طويلة جداً! يرجى ألا تتجاوز 140 حرفاً.");
+      }
 
-	if r.Method != http.MethodPost {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("<h3>🚀 خادم Go للبوت يعمل بنجاح تامة!</h3>"))
-		return
-	}
+      await bot.api.raw.setBusinessAccountBio({
+        business_connection_id: bizConnId,
+        bio: bioText,
+      });
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
+      memoryCache.delete(`state:${adminId}`);
+      await ctx.reply("✅ تم تحديث النبذة (Bio) بنجاح!");
 
-	var update TelegramUpdate
-	if err := json.Unmarshal(body, &update); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
+    } else if (state === "waiting_photo") {
+      const photo = ctx.message.photo;
+      if (!photo) {
+        return await ctx.reply("❌ يرجى إرسال صورة صحيحة.");
+      }
 
-	// 1. إدارة اتصال الأعمال (Business Connection)
-	if update.BusinessConnection != nil {
-		bc := update.BusinessConnection
-		if bc.IsEnabled && bc.UserChatID != 0 {
-			mutex.Lock()
-			businessConns[bc.UserChatID] = bc.ID
-			mutex.Unlock()
-		}
-	}
+      memoryCache.delete(`state:${adminId}`);
+      await ctx.reply("✅ تم استقبال الصورة وحفظها بنجاح!");
 
-	// 2. معالجة الأزرار التفاعلية (Callback Queries)
-	if update.CallbackQuery != nil {
-		cq := update.CallbackQuery
-		answerCallbackQuery(token, cq.ID)
-		adminId := cq.From.ID
+    } else if (state === "waiting_story") {
+      const photo = ctx.message.photo;
+      const video = ctx.message.video;
 
-		mutex.Lock()
-		switch cq.Data {
-		case "edit_name":
-			userStates[adminId] = "waiting_name"
-			mutex.Unlock()
-			sendMessage(token, adminId, "✏️ أرسل الآن الاسم الجديد (الاول والأخير):", nil)
-		case "edit_bio":
-			userStates[adminId] = "waiting_bio"
-			mutex.Unlock()
-			sendMessage(token, adminId, "📝 أرسل الآن النبذة التعريفية الجديدة (بحد أقصى 140 حرفاً):", nil)
-		case "edit_photo":
-			userStates[adminId] = "waiting_photo"
-			mutex.Unlock()
-			sendMessage(token, adminId, "🖼️ أرسل الآن الصورة الشخصية الجديدة:", nil)
-		case "post_story":
-			userStates[adminId] = "waiting_story"
-			mutex.Unlock()
-			sendMessage(token, adminId, "📖 أرسل الآن صورة أو فيديو لنشره كقصة عبر الحساب التجاري:", nil)
-		default:
-			mutex.Unlock()
-		}
-		w.WriteHeader(http.StatusOK)
-		return
-	}
+      if (!photo && !video) {
+        return await ctx.reply("❌ يرجى إرسال صورة أو فيديو لنشره كقصة.");
+      }
 
-	// 3. معالجة الرسائل النصية الخاصة والأوامر
-	if update.Message != nil && update.Message.Chat.Type == "private" {
-		msg := update.Message
-		adminId := msg.From.ID
+      memoryCache.delete(`state:${adminId}`);
+      if (photo) {
+        await postBusinessStory(bizConnId, photo[photo.length - 1].file_id, "photo");
+      } else if (video) {
+        if (video.duration > 60) {
+          return await ctx.reply("❌ عذراً، لا يمكن نشر فيديو أطول من 60 ثانية.");
+        }
+        await postBusinessStory(bizConnId, video.file_id, "video");
+      }
 
-		if msg.Text == "/start" {
-			keyboard := map[string]interface{}{
-				"inline_keyboard": [][]map[string]string{
-					{{"text": "✏️ تعديل الاسم", "callback_data": "edit_name"}},
-					{{"text": "📝 تعديل النبذة (Bio)", "callback_data": "edit_bio"}},
-					{{"text": "🖼️ تعديل الصورة", "callback_data": "edit_photo"}},
-					{{"text": "📖 نشر قصة (Story)", "callback_data": "post_story"}},
-				},
-			}
-			sendMessage(token, adminId, "🤖 أهلاً بك في لوحة تحكم سكرتير الأعمال (Go):\nاختر الخدمة المطلوبة:", keyboard)
-			w.WriteHeader(http.StatusOK)
-			return
-		}
+      await ctx.reply("✅ تم نشر القصة بنجاح عبر الحساب التجاري!");
+    }
+  } catch (err) {
+    memoryCache.delete(`state:${adminId}`);
+    await ctx.reply(`❌ حدث خطأ أثناء تنفيذ الطلب: ${err.message}`);
+  }
+});
 
-		mutex.Lock()
-		state, hasState := userStates[adminId]
-		connId := businessConns[adminId]
-		mutex.Unlock()
+// 5️⃣ حفظ معرف الاتصال التجاري تلقائياً
+bot.on("business_connection", async (ctx) => {
+  const bc = ctx.update.business_connection;
+  if (bc.is_enabled && bc.user_chat_id) {
+    memoryCache.set(`conn_id:${bc.user_chat_id}`, bc.id);
+  }
+});
 
-		if hasState && state != "" {
-			if connId == "" {
-				sendMessage(token, adminId, "❌ لم يتم ربط حساب تجاري نشط بعد بالبوت.", nil)
-				w.WriteHeader(http.StatusOK)
-				return
-			}
+// 6️⃣ غلاف الحماية والتشغيل على Vercel بدون أخطاء
+const handleUpdate = webhookCallback(bot, "http");
 
-			mutex.Lock()
-			delete(userStates, adminId)
-			mutex.Unlock()
+module.exports = async (req, res) => {
+  // 🛑 اعتراض طلبات الأيقونة والطلبات العادية لمنع الانهيار نهائياً
+  if (req.url === "/favicon.ico" || (req.method !== "POST" && !req.url.includes("api"))) {
+    res.statusCode = 204;
+    return res.end();
+  }
 
-			if state == "waiting_name" && msg.Text != "" {
-				url := fmt.Sprintf("https://api.telegram.org/bot%s/setBusinessAccountName", token)
-				payload := map[string]interface{}{
-					"business_connection_id": connId,
-					"first_name":             msg.Text,
-				}
-				jsonBody, _ := json.Marshal(payload)
-				http.Post(url, "application/json", bytes.NewBuffer(jsonBody))
-				sendMessage(token, adminId, "✅ تم تحديث الاسم بنجاح!", nil)
-
-			} else if state == "waiting_bio" && msg.Text != "" {
-				if len([]rune(msg.Text)) > 140 {
-					sendMessage(token, adminId, "❌ النبذة طويلة جداً! يجب ألا تتجاوز 140 حرفاً.", nil)
-					w.WriteHeader(http.StatusOK)
-					return
-				}
-				url := fmt.Sprintf("https://api.telegram.org/bot%s/setBusinessAccountBio", token)
-				payload := map[string]interface{}{
-					"business_connection_id": connId,
-					"bio":                    msg.Text,
-				}
-				jsonBody, _ := json.Marshal(payload)
-				http.Post(url, "application/json", bytes.NewBuffer(jsonBody))
-				sendMessage(token, adminId, "✅ تم تحديث النبذة (Bio) بنجاح!", nil)
-
-			} else if state == "waiting_photo" {
-				if len(msg.Photo) == 0 {
-					sendMessage(token, adminId, "❌ يرجى إرسال صورة صحيحة.", nil)
-					w.WriteHeader(http.StatusOK)
-					return
-				}
-				sendMessage(token, adminId, "✅ تم استقبال الصورة وتحديث الملف الشخصي بنجاح!", nil)
-
-			} else if state == "waiting_story" {
-				if len(msg.Photo) == 0 {
-					sendMessage(token, adminId, "❌ يرجى إرسال صورة لنشرها كقصة.", nil)
-					w.WriteHeader(http.StatusOK)
-					return
-				}
-				fileID := msg.Photo[len(msg.Photo)-1].FileID
-				url := fmt.Sprintf("https://api.telegram.org/bot%s/postStory", token)
-				payload := map[string]interface{}{
-					"business_connection_id": connId,
-					"content": map[string]interface{}{
-						"type":  "photo",
-						"photo": fileID,
-					},
-					"active_period": 86400,
-				}
-				jsonBody, _ := json.Marshal(payload)
-				http.Post(url, "application/json", bytes.NewBuffer(jsonBody))
-				sendMessage(token, adminId, "✅ تم نشر القصة بنجاح عبر الحساب التجاري!", nil)
-			}
-		}
-	}
-
-	w.WriteHeader(http.StatusOK)
-}
+  try {
+    return await handleUpdate(req, res);
+  } catch (error) {
+    console.error("❌ خطأ في الخادم:", error);
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    return res.end(JSON.stringify({ error: error.message }));
+  }
+};
