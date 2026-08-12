@@ -1,1034 +1,639 @@
-// ============================================================
-// 📦 استيراد المكتبات والإعدادات الأساسية
-// ============================================================
-const { Bot, webhookCallback, InlineKeyboard, session, InputFile } = require('grammy');
-const express = require('express');
-const cors = require('cors');
-const axios = require('axios');
-const translate = require('@vitalets/google-translate-api');
+const { Bot, webhookCallback, InlineKeyboard, InputFile } = require("grammy");
 
-require('dotenv').config();
+// 1️⃣ إعداد البوت والتوكن الأساسي
+const token = process.env.TELEGRAM_BOT_TOKEN;
+if (!token) {
+  console.error("❌ خطأ: لم يتم العثور على TELEGRAM_BOT_TOKEN في متغيرات البيئة!");
+}
 
-// ============================================================
-// 🔐 المتغيرات الثابتة والإعدادات
-// ============================================================
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const ADMIN_ID = parseInt(process.env.ADMIN_ID);
-const CHANNEL_URL = process.env.CHANNEL_URL || 'https://t.me/Xhwe2';
+const bot = new Bot(token || "DUMMY_TOKEN");
 
-// ============================================================
-// 📊 ذاكرة التخزين المؤقت للترجمات
-// ============================================================
-const translationCache = new Map();
-const CACHE_TTL = 3600000; // ساعة واحدة
-const userMessages = new Map();
-const userWarnings = new Map();
-const groupStats = new Map();
+// الذاكرة المؤقتة الداخلية لإدارة الحالات والإعدادات (In-Memory State & Cache)
+const memoryCache = new Map();
 
-// ============================================================
-// 📝 قوائم الكلمات الممنوعة والمفتاحية (محدثة)
-// ============================================================
+// معالج الأخطاء العالمي لمنع انهيار الخادم (Serverless Crash Protection)
+bot.catch((err) => {
+  console.error("❌ حدث خطأ أثناء معالجة الطلب:", err.error || err);
+});
 
-// الكلمات البذيئة والمسيئة (بالعربية والإنجليزية)
-const BAD_WORDS = [
-  // عربية
-  'كس', 'عير', 'قحبة', 'منيوك', 'شرموطة', 'زبي', 'طيز', 'نيك', 'متناك',
-  'خول', 'قواد', 'عاهرة', 'مومس', 'سافل', 'واطي', 'حقير', 'دنيء',
-  // إنجليزية
-  'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'damn', 'crap',
-  'dick', 'pussy', 'whore', 'slut', 'cunt', 'motherfucker',
-  // مزيج
-  'f***', 's***', 'b****', 'a******', 'd***'
-];
+// 2️⃣ القواميس، الكلمات البذيئة، والردود الذكية
+const badWords = ["كحبة", "مطي", "قندرة", "ساقط", "فرخ", "عير", "كس", "طيز", "زنيّم"];
 
-// أنماط السبام والإعلانات
-const SPAM_PATTERNS = [
-  /t\.me\//gi,
-  /telegram\.me\//gi,
-  /https?:\/\/t\.me\//gi,
-  /@\w+/gi,
-  /https?:\/\/[^\s]+/gi,
-  /www\.[^\s]+/gi,
-  /قناة|channel|اشتراك|انضمام/i,
-  /ربح|دولار|عملة|تعدين|استثمار/i,
-  /🔥|💰|💵|💎|🚀/g // إيموجي مبالغ فيه
-];
-
-// الكلمات المفتاحية للرد التلقائي
-const KEYWORD_REPLIES = {
-  // عربي
-  'السعر': '💰 الأسعار متوفرة في القناة الرسمية: ' + CHANNEL_URL,
-  'الاسعار': '💰 الأسعار متوفرة في القناة الرسمية: ' + CHANNEL_URL,
-  'سعر': '💰 الأسعار متوفرة في القناة الرسمية: ' + CHANNEL_URL,
-  'ثمن': '💰 الأسعار متوفرة في القناة الرسمية: ' + CHANNEL_URL,
-  'الدعم': '🆘 للدعم يرجى التواصل مع الإدارة عبر الخاص أو مراسلة @SupportBot',
-  'دعم': '🆘 للدعم يرجى التواصل مع الإدارة عبر الخاص أو مراسلة @SupportBot',
-  'التسجيل': '📝 للتسجيل يرجى زيارة الرابط: ' + CHANNEL_URL,
-  'تسجيل': '📝 للتسجيل يرجى زيارة الرابط: ' + CHANNEL_URL,
-  'اشتراك': '📝 للتسجيل يرجى زيارة الرابط: ' + CHANNEL_URL,
-  'مرحباً': '👋 أهلاً وسهلاً بك! كيف يمكنني مساعدتك؟',
-  'مرحبا': '👋 أهلاً وسهلاً بك! كيف يمكنني مساعدتك؟',
-  'السلام عليكم': '🌙 وعليكم السلام ورحمة الله وبركاته، كيف يمكنني خدمتك؟',
-  'شكرا': '🙏 عفواً، في خدمتك دائماً!',
-  'شكراً': '🙏 عفواً، في خدمتك دائماً!',
-  'ممتاز': '✨ شكراً لك، سعداء بتقديم الأفضل دائماً!',
-  'رائع': '🌟 شكراً جزيلاً، وجودك يسعدنا!',
-  
-  // English
-  'price': '💰 Prices are available on our official channel: ' + CHANNEL_URL,
-  'prices': '💰 Prices are available on our official channel: ' + CHANNEL_URL,
-  'support': '🆘 For support, please contact the admin privately or message @SupportBot',
-  'register': '📝 To register, please visit the link: ' + CHANNEL_URL,
-  'registration': '📝 To register, please visit the link: ' + CHANNEL_URL,
-  'hello': '👋 Hello and welcome! How can I help you?',
-  'hi': '👋 Hi there! How can I assist you?',
-  'thanks': '🙏 You\'re welcome! Always at your service!',
-  'thank': '🙏 You\'re welcome! Always at your service!',
-  'good': '✨ Thank you, we\'re always happy to provide the best!',
-  'great': '🌟 Thank you so much, your presence makes us happy!'
+const smartAnswers = {
+  السعر: "ℹ️ لمعرفة الأسعار والتفاصيل الكاملة، يمكنك زيارة القناة الرسمية أو مراسلة الدعم.",
+  الدعم: "🛠️ للتواصل مع الدعم الفني، يرجى مراسلة الحساب التجاري المباشر.",
+  التسجيل: "📝 يمكنك التسجيل والاشتراك عبر فتح المحادثة الخاصة وتتبع التعليمات.",
 };
 
-// القصص التحفيزية (محدثة)
-const QUOTES = [
-  '💪 "النجاح ليس غياب الفشل، بل هو الإصرار بعد الفشل" - نيلسون مانديلا',
-  '🌟 "كن التغيير الذي تريد رؤيته في العالم" - غاندي',
-  '🚀 "المستقبل يبدأ من حيث الإرادة تنتهي" - ويليام جيمس',
-  '🎯 "التركيز هو مفتاح الإبداع" - ستيف جوبز',
-  '📚 "التعليم هو أقوى سلاح يمكنك استخدامه لتغيير العالم" - نيلسون مانديلا',
-  '💡 "العقل العظيم لديه أفكار، والعقل المتوسط لديه أحداث، والعقل الصغير لديه أشخاص" - إليانور روزفلت',
-  '⭐ "النجاح هو القدرة على الانتقال من فشل إلى فشل دون فقدان الحماس" - ونستون تشرشل',
-  '🌅 "كل يوم فرصة جديدة لبداية جديدة" - مجهول',
-  '🎨 "الإبداع هو الذكاء الذي يمرح" - ألبرت أينشتاين',
-  '🦋 "التغيير هو القانون الأساسي للحياة" - مجهول'
+const quotes = [
+  "قاوم ما تكره لتصل الى ما تحب",
+  "الحرب بين أنت ضد أنت",
+  "أبنِ نفسك بنفسك لنفسك",
+  "ميخالف",
+  "حتى لو متأخر تگدر..!",
+  "من يعيش في خوف لن يكون حراً ابداً",
+  "لا أبرح حتى أبلغ",
+  "أنه مبرمج فحسب",
+  "المرء نتاج خلواته",
+  "لا مزيد من الأصدقاء المزيفين",
 ];
 
-// ============================================================
-// 🤖 إنشاء البوت مع جلسات الذاكرة
-// ============================================================
-const bot = new Bot(BOT_TOKEN);
+// قاموس اللغات المتكامل (عربي / إنجليزي)
+const i18n = {
+  ar: {
+    welcome: "أهلاً بك في لوحة تحكم سكرتير الحساب التجاري 🤖\nاختر من الأزرار أدناه للتحكم الكامل:",
+    main_menu: "القائمة الرئيسية 🤖:",
+    stop_btn: "🛑 إيقاف الرد الخاص",
+    start_btn: "🟢 تشغيل الرد الخاص",
+    edit_text_btn: "📝 تعديل نص الرد الخاص",
+    exclude_btn: "👤 استثناء حساب",
+    list_excluded_btn: "📋 عرض المستثنين",
+    clear_excluded_btn: "🧹 مسح المستثنين",
+    profile_btn: "🧑 إدارة الملف الشخصي",
+    story_btn: "📖 نشر قصة",
+    lang_ar_btn: "🇮🇶 العربية",
+    lang_en_btn: "🇺🇸 English",
+    back_btn: "🔙 رجوع",
+    stopped: "🛑 تم إيقاف الرد التلقائي الخاص بنجاح.",
+    started: "🟢 تم تشغيل الرد التلقائي الخاص بنجاح.",
+    edit_prompt: "📝 أرسل الآن نص الرد التلقائي الجديد للخاص:",
+    saved_text: "✅ تم حفظ نص الرد التلقائي الجديد بنجاح!",
+    exclude_prompt: "👤 أرسل ايدي (ID) الحساب المراد استثناؤه:",
+    id_added: "✅ تم إضافة الايدي إلى قائمة الاستثناء.",
+    no_excluded: "لا يوجد حسابات مستثناة حالياً.",
+    cleared_excluded: "🧹 تم مسح قائمة الاستثناءات بالكامل.",
+    profile_menu: "🧑 إدارة الملف الشخصي - اختر ما تريد تعديله:",
+    edit_name: "✏️ تعديل الاسم",
+    edit_bio: "📝 تعديل النبذة",
+    edit_photo: "🖼️ تعديل الصورة",
+    edit_username: "🔗 تعديل اليوزر",
+    story_dur_title: "⏱️ اختر مدة ظهور القصة المطلوب نشرها:",
+    dur_6h: "6 ساعات",
+    dur_12h: "12 ساعة",
+    dur_24h: "24 ساعة",
+    dur_48h: "48 ساعة",
+    story_prompt: "📖 أرسل الآن صورة أو فيديو لنشره كقصة (مدة الظهور: %s):",
+    story_success: "✅ تم نشر القصة بنجاح!",
+    no_biz_conn: "❌ لم يتم ربط حساب تجاري بعد بالبوت.",
+    ttl_media_alert: "🔥 *تم حفظ نسخة احتياطية من وسائط واردة!*\n👤 من: %s (`%d`)",
+    deleted_alert: "🗑️ *تنبيه: تم حذف رسالة/وسائط!*\n👤 العميل: %s (`%d`)",
+  },
+  en: {
+    welcome: "Welcome to Business Secretary Control Panel 🤖\nChoose an option below:",
+    main_menu: "Main Menu 🤖:",
+    stop_btn: "🛑 Stop Auto-Reply",
+    start_btn: "🟢 Start Auto-Reply",
+    edit_text_btn: "📝 Edit Reply Text",
+    exclude_btn: "👤 Exclude Account ID",
+    list_excluded_btn: "📋 View Excluded List",
+    clear_excluded_btn: "🧹 Clear Excluded List",
+    profile_btn: "🧑 Manage Profile",
+    story_btn: "📖 Post Story",
+    lang_ar_btn: "🇮🇶 العربية",
+    lang_en_btn: "🇺🇸 English",
+    back_btn: "🔙 Back",
+    stopped: "🛑 Auto-reply stopped successfully.",
+    started: "🟢 Auto-reply started successfully.",
+    edit_prompt: "📝 Send the new auto-reply text now:",
+    saved_text: "✅ Auto-reply text saved successfully!",
+    exclude_prompt: "👤 Send the Account ID to exclude:",
+    id_added: "✅ Account ID added to exclusions.",
+    no_excluded: "No excluded accounts currently.",
+    cleared_excluded: "🧹 All exclusions cleared successfully.",
+    profile_menu: "🧑 Manage Profile - Select setting to edit:",
+    edit_name: "✏️ Edit Name",
+    edit_bio: "📝 Edit Bio",
+    edit_photo: "🖼️ Edit Photo",
+    edit_username: "🔗 Edit Username",
+    story_dur_title: "⏱️ Select Story Duration:",
+    dur_6h: "6 Hours",
+    dur_12h: "12 Hours",
+    dur_24h: "24 Hours",
+    dur_48h: "48 Hours",
+    story_prompt: "📖 Send a photo/video to post as story (Duration: %s):",
+    story_success: "✅ Story posted successfully!",
+    no_biz_conn: "❌ No connected business account found.",
+    ttl_media_alert: "🔥 *Backup of incoming media saved!*\n👤 From: %s (`%d`)",
+    deleted_alert: "🗑️ *Alert: Deleted Message/Media!*\n👤 Customer: %s (`%d`)",
+  },
+};
 
-// تفعيل الجلسات للتخزين المؤقت
-bot.use(session({
-  initial: () => ({
-    userMessages: {},
-    lastReply: {},
-    warnings: {},
-    groupStats: {}
-  })
-}));
-
-// ============================================================
-// 🛠️ أدوات مساعدة
-// ============================================================
-
-// دالة الحصول على اسم المستخدم
-function getUserName(user) {
-  if (!user) return 'العميل';
-  return user.first_name || user.username || user.last_name || 'العميل';
+function t(lang, key) {
+  const l = lang === "en" ? "en" : "ar";
+  return i18n[l][key] || key;
 }
 
-// دالة الحصول على معرف المستخدم
-function getUserId(user) {
-  return user?.id || 'unknown';
+// 3️⃣ أدوات النظام المساعدة (الترجمة، المفاتيح، والقصص)
+function getNerdChannelKeyboard() {
+  return new InlineKeyboard().url("تحديثات نيرد 📢", "https://t.me/Xhwe2");
 }
 
-// دالة إنشاء الزر الشفاف
-function createChannelButton(text = '📢 تحديثات نيرد') {
-  return new InlineKeyboard().url(text, CHANNEL_URL);
-}
-
-// دالة إنشاء أزرار متعددة
-function createActionButtons() {
-  return new InlineKeyboard()
-    .url('📢 تحديثات نيرد', CHANNEL_URL)
-    .row()
-    .url('💬 تواصل مع الدعم', 'https://t.me/SupportBot');
-}
-
-// دالة التحقق من الكلمات البذيئة
-function containsBadWords(text) {
-  if (!text) return false;
-  const lowerText = text.toLowerCase();
-  return BAD_WORDS.some(word => lowerText.includes(word.toLowerCase()));
-}
-
-// دالة التحقق من السبام
-function isSpam(text) {
-  if (!text) return false;
-  // التحقق من تكرار الأحرف
-  if (/(.)\1{5,}/.test(text)) return true; // تكرار 5 مرات أو أكثر
-  // التحقق من النص الطويل بدون مسافات
-  if (text.length > 500 && !text.includes(' ')) return true;
-  // التحقق من الأنماط
-  return SPAM_PATTERNS.some(pattern => pattern.test(text));
-}
-
-// دالة الحصول على اقتباس عشوائي
-function getRandomQuote() {
-  return QUOTES[Math.floor(Math.random() * QUOTES.length)];
-}
-
-// دالة الحصول على رد مفتاحي
-function getKeywordReply(text) {
-  if (!text) return null;
-  const lowerText = text.toLowerCase();
-  for (const [keyword, reply] of Object.entries(KEYWORD_REPLIES)) {
-    if (lowerText.includes(keyword.toLowerCase())) {
-      return reply;
-    }
-  }
-  return null;
-}
-
-// دالة تنسيق الوقت
-function formatTime(date) {
-  return new Date(date).toLocaleString('ar-EG', {
-    timeZone: 'Africa/Cairo',
-    hour12: true
-  });
-}
-
-// ============================================================
-// 🌐 دالة الترجمة المجانية مع التخزين المؤقت
-// ============================================================
-
-async function detectAndTranslate(text, targetLang = 'ar') {
+async function translateText(text, targetLang) {
+  if (!text || !text.trim()) return { text: "", detectedLang: "" };
   try {
-    // 🔍 إنشاء مفتاح للذاكرة المؤقتة
-    const cacheKey = `${text}_${targetLang}`;
-    
-    // التحقق من وجود الترجمة في الذاكرة المؤقتة
-    if (translationCache.has(cacheKey)) {
-      const cached = translationCache.get(cacheKey);
-      if (Date.now() - cached.timestamp < CACHE_TTL) {
-        console.log('✅ استخدام ترجمة من الذاكرة المؤقتة');
-        return cached.data;
-      }
-    }
-
-    // 📝 إجراء الترجمة
-    console.log('🔄 جاري الترجمة...');
-    const result = await translate(text, { 
-      to: targetLang,
-      autoCorrect: true
-    });
-
-    // استخراج اللغة المصدر
-    const fromLang = result.from.language.iso || 'unknown';
-    
-    const translationResult = {
-      original: text,
-      translated: result.text,
-      from: fromLang,
-      to: targetLang,
-      detected: result.from.text || ''
-    };
-
-    // 💾 تخزين النتيجة في الذاكرة المؤقتة
-    translationCache.set(cacheKey, {
-      data: translationResult,
-      timestamp: Date.now()
-    });
-
-    return translationResult;
-
-  } catch (error) {
-    console.error('❌ خطأ في الترجمة:', error);
-    
-    // محاولة الترجمة من خادم بديل في حالة الفشل
-    try {
-      const fallbackResult = await translate(text, { 
-        to: targetLang,
-        host: 'translate.googleapis.com',
-        autoCorrect: true
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    let translatedText = "";
+    if (data && data[0]) {
+      data[0].forEach((item) => {
+        if (item && item[0]) translatedText += item[0];
       });
-      
-      return {
-        original: text,
-        translated: fallbackResult.text,
-        from: fallbackResult.from?.language?.iso || 'unknown',
-        to: targetLang
-      };
-    } catch (fallbackError) {
-      console.error('❌ فشلت الترجمة من الخادم البديل:', fallbackError);
-      return { original: text, translated: text, from: 'unknown', to: targetLang };
     }
+    const detectedLang = data && data[2] ? data[2] : "";
+    return { text: translatedText, detectedLang };
+  } catch (err) {
+    return { text: text, detectedLang: "" };
   }
 }
 
-// ============================================================
-// 📊 وظائف إحصاءات الترجمة
-// ============================================================
+async function postBusinessStory(bizConnId, fileId, mediaType, activePeriod) {
+  const fileInfo = await bot.api.getFile(fileId);
+  const fileUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.file_path}`;
+  const inputFile = new InputFile({ url: fileUrl });
 
-function getTranslationStats() {
-  return {
-    totalTranslations: translationCache.size,
-    cacheSize: translationCache.size,
-    memoryUsage: process.memoryUsage().heapUsed / 1024 / 1024
+  if (mediaType === "photo") {
+    return await bot.api.raw.postStory({
+      business_connection_id: bizConnId,
+      content: { type: "photo", photo: inputFile },
+      active_period: activePeriod,
+    });
+  } else {
+    return await bot.api.raw.postStory({
+      business_connection_id: bizConnId,
+      content: { type: "video", video: inputFile },
+      active_period: activePeriod,
+    });
+  }
+}
+
+function extractMediaInfo(msg) {
+  const info = {
+    fromId: msg.from.id,
+    fromName: `${msg.from.first_name || ""} ${msg.from.last_name || ""}`.trim() || msg.from.username || "Customer",
+    caption: msg.caption || "",
+    text: msg.text || "",
+    type: "text",
+    fileId: null,
   };
+
+  if (msg.photo) {
+    info.type = "photo";
+    info.fileId = msg.photo[msg.photo.length - 1].file_id;
+  } else if (msg.video) {
+    info.type = "video";
+    info.fileId = msg.video.file_id;
+  } else if (msg.animation) {
+    info.type = "animation";
+    info.fileId = msg.animation.file_id;
+  } else if (msg.sticker) {
+    info.type = "sticker";
+    info.fileId = msg.sticker.file_id;
+  } else if (msg.voice) {
+    info.type = "voice";
+    info.fileId = msg.voice.file_id;
+  } else if (msg.audio) {
+    info.type = "audio";
+    info.fileId = msg.audio.file_id;
+  } else if (msg.document) {
+    info.type = "document";
+    info.fileId = msg.document.file_id;
+  } else if (msg.video_note) {
+    info.type = "video_note";
+    info.fileId = msg.video_note.file_id;
+  }
+
+  return info;
 }
 
-// ============================================================
-// 🧹 تنظيف الذاكرة المؤقتة كل ساعة
-// ============================================================
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of translationCache) {
-    if (now - value.timestamp > CACHE_TTL) {
-      translationCache.delete(key);
-    }
-  }
-  console.log('🧹 تم تنظيف الذاكرة المؤقتة للترجمات');
-  
-  // تنظيف بيانات المستخدمين القديمة
-  for (const [userId, data] of userMessages) {
-    if (now - data.timestamp > 86400000) { // 24 ساعة
-      userMessages.delete(userId);
-    }
-  }
-  
-  // تنظيف التحذيرات القديمة
-  for (const [userId, data] of userWarnings) {
-    if (now - data.timestamp > 86400000) { // 24 ساعة
-      userWarnings.delete(userId);
-    }
-  }
-}, CACHE_TTL);
-
-// ============================================================
-// 📨 1. نظام الرد التلقائي الخاص (Business Private Auto-Reply)
-// ============================================================
-
-// معالج رسائل الأعمال
-bot.on('business_message', async (ctx) => {
+async function sendMediaToAdmin(adminId, media, headerText) {
+  const caption = `${headerText}\n\n` + (media.caption ? `💬 الشرح: ${media.caption}` : "");
   try {
-    const msg = ctx.businessMessage;
-    if (!msg || !msg.text) return;
-
-    const userId = msg.from.id;
-    const userName = getUserName(msg.from);
-    const userText = msg.text;
-
-    console.log(`📩 رسالة خاصة من ${userName} (${userId}): ${userText.substring(0, 50)}...`);
-
-    // 🔍 اكتشاف لغة المستخدم
-    const detectedLang = await detectAndTranslate(userText, 'ar');
-    
-    // إذا كانت اللغة غير عربية، إرسال تنبيه للأدمن
-    if (detectedLang.from !== 'ar' && detectedLang.from !== 'unknown') {
-      const adminAlert = `
-🔔 **تنبيه: رسالة بلغة أجنبية**
-👤 المستخدم: ${userName}
-🆔 المعرف: ${userId}
-🌐 اللغة المكتشفة: ${detectedLang.from}
-
-📝 النص الأصلي:
-${detectedLang.original}
-
-📝 الترجمة للعربية:
-${detectedLang.translated}
-
-⏰ الوقت: ${formatTime(Date.now())}
-      `;
-      await bot.api.sendMessage(ADMIN_ID, adminAlert, { parse_mode: 'Markdown' });
+    switch (media.type) {
+      case "photo":
+        await bot.api.sendPhoto(adminId, media.fileId, { caption, parse_mode: "Markdown" });
+        break;
+      case "video":
+        await bot.api.sendVideo(adminId, media.fileId, { caption, parse_mode: "Markdown" });
+        break;
+      case "animation":
+        await bot.api.sendAnimation(adminId, media.fileId, { caption, parse_mode: "Markdown" });
+        break;
+      case "sticker":
+        await bot.api.sendMessage(adminId, headerText, { parse_mode: "Markdown" });
+        await bot.api.sendSticker(adminId, media.fileId);
+        break;
+      case "voice":
+        await bot.api.sendVoice(adminId, media.fileId, { caption, parse_mode: "Markdown" });
+        break;
+      case "audio":
+        await bot.api.sendAudio(adminId, media.fileId, { caption, parse_mode: "Markdown" });
+        break;
+      case "document":
+        await bot.api.sendDocument(adminId, media.fileId, { caption, parse_mode: "Markdown" });
+        break;
+      case "video_note":
+        await bot.api.sendMessage(adminId, headerText, { parse_mode: "Markdown" });
+        await bot.api.sendVideoNote(adminId, media.fileId);
+        break;
+      case "text":
+        await bot.api.sendMessage(adminId, `${headerText}\n\n💬 *المحتوى المحذوف:*\n${media.text}`, { parse_mode: "Markdown" });
+        break;
     }
+  } catch (err) {
+    console.error("خطأ إعادة إرسال الوسائط:", err);
+  }
+}
 
-    // 📝 بناء الرد المخصص
-    const userFirstName = msg.from.first_name || userName;
-    let replyText = `👋 مرحباً ${userFirstName}،\n\n`;
-    replyText += `شكراً لتواصلك معنا! سنرد عليك في أقرب وقت.\n\n`;
-    replyText += `💡 ${getRandomQuote()}\n\n`;
-    replyText += `🔗 للمزيد من المعلومات، تفضل بزيارة قناتنا:`;
+// لوحات التحكم (Keyboards)
+function getMainMenuKeyboard(lang) {
+  return new InlineKeyboard()
+    .text(t(lang, "stop_btn"), "action_stop").text(t(lang, "start_btn"), "action_start").row()
+    .text(t(lang, "edit_text_btn"), "action_edit_text").row()
+    .text(t(lang, "exclude_btn"), "action_exclude").text(t(lang, "list_excluded_btn"), "action_list_excluded").row()
+    .text(t(lang, "clear_excluded_btn"), "action_clear_excluded").row()
+    .text(t(lang, "profile_btn"), "menu_profile").text(t(lang, "story_btn"), "menu_story").row()
+    .text(t(lang, "lang_ar_btn"), "lang_ar").text(t(lang, "lang_en_btn"), "lang_en").row()
+    .url("تحديثات نيرد 📢", "https://t.me/Xhwe2");
+}
 
-    // 🌐 ترجمة الرد إلى لغة المستخدم إذا كانت غير عربية
-    let finalReply = replyText;
-    if (detectedLang.from !== 'ar' && detectedLang.from !== 'unknown') {
-      const translatedReply = await detectAndTranslate(replyText, detectedLang.from);
-      finalReply = translatedReply.translated;
-    }
+function getProfileKeyboard(lang) {
+  return new InlineKeyboard()
+    .text(t(lang, "edit_name"), "prof_name").row()
+    .text(t(lang, "edit_bio"), "prof_bio").row()
+    .text(t(lang, "edit_photo"), "prof_photo").row()
+    .text(t(lang, "edit_username"), "prof_username").row()
+    .text(t(lang, "back_btn"), "menu_main");
+}
 
-    // 📤 إرسال الرد مع الزر
-    const keyboard = createChannelButton('📢 تابعنا للمزيد');
-    await ctx.reply(finalReply, {
-      reply_parameters: { message_id: msg.message_id },
-      reply_markup: keyboard,
-      parse_mode: 'Markdown'
-    });
+function getStoryDurationKeyboard(lang) {
+  return new InlineKeyboard()
+    .text(t(lang, "dur_6h"), "sdur_21600").text(t(lang, "dur_12h"), "sdur_43200").row()
+    .text(t(lang, "dur_24h"), "sdur_86400").text(t(lang, "dur_48h"), "sdur_172800").row()
+    .text(t(lang, "back_btn"), "menu_main");
+}
 
-    // 📊 تسجيل التفاعل
-    console.log(`✅ رد تلقائي مرسل إلى ${userName} (${userId})`);
-    
-    // تحديث إحصائيات المستخدم
-    if (!userMessages.has(userId)) {
-      userMessages.set(userId, { count: 0, timestamp: Date.now() });
-    }
-    const userData = userMessages.get(userId);
-    userData.count++;
-    userMessages.set(userId, userData);
+function getBackKeyboard(lang) {
+  return new InlineKeyboard().text(t(lang, "back_btn"), "menu_main");
+}
 
-  } catch (error) {
-    console.error('❌ خطأ في معالج الرسائل التجارية:', error);
-    // محاولة إرسال رد عام في حالة الفشل
+// إدارة الجلسات المؤقتة في الذاكرة
+function getAdminConfig(adminId) {
+  let cfg = memoryCache.get(`config:${adminId}`);
+  if (!cfg) {
+    cfg = { isStopped: false, autoReply: "", excluded: [], state: "", lang: "ar", businessConnId: "" };
+    memoryCache.set(`config:${adminId}`, cfg);
+  }
+  return cfg;
+}
+
+function saveAdminConfig(adminId, config) {
+  memoryCache.set(`config:${adminId}`, config);
+}
+
+// 4️⃣ نظام الإشراف والحماية في المجموعات (Group Moderation)
+bot.on(["message:group", "message:supergroup"], async (ctx) => {
+  const messageText = ctx.message.text || ctx.message.caption || "";
+  const userId = ctx.from?.id;
+
+  const containsBadWord = badWords.some((word) => messageText.toLowerCase().includes(word));
+  if (containsBadWord) {
     try {
-      await ctx.reply('👋 شكراً لتواصلك معنا! سنرد عليك في أقرب وقت.');
-    } catch (replyError) {
-      console.error('❌ فشل إرسال الرد الاحتياطي:', replyError);
-    }
+      await ctx.deleteMessage();
+      return;
+    } catch (e) {}
   }
-});
 
-// ============================================================
-// 🛡️ 2. الإشراف والحماية المتقدمة للمجموعات
-// ============================================================
+  const hasLink = /(https?:\/\/[^\s]+)|(t\.me\/[^\s]+)|(telegram\.me\/[^\s]+)/i.test(messageText);
+  if (hasLink && userId) {
+    try {
+      await ctx.deleteMessage();
+      await ctx.banChatMember(userId);
+      return;
+    } catch (e) {}
+  }
 
-// معالج رسائل المجموعات
-bot.on('message', async (ctx) => {
-  try {
-    const msg = ctx.message;
-    if (!msg || !msg.text || !msg.chat) return;
-
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-    const userName = getUserName(msg.from);
-    const text = msg.text;
-
-    // التحقق من أن الرسالة في مجموعة
-    if (msg.chat.type === 'private') return;
-
-    console.log(`📨 رسالة من ${userName} في مجموعة ${msg.chat.title}: ${text.substring(0, 50)}...`);
-
-    // ==========================================================
-    // 🚫 حظر الألفاظ البذيئة
-    // ==========================================================
-    if (containsBadWords(text)) {
-      try {
-        await ctx.deleteMessage();
-        await ctx.reply(`⚠️ @${userName}، تم حذف رسالتك لاحتوائها على كلمات غير لائقة.`);
-        
-        // تسجيل المخالفة
-        const warningCount = (userWarnings.get(userId)?.count || 0) + 1;
-        userWarnings.set(userId, { count: warningCount, timestamp: Date.now() });
-        
-        // إذا تكررت المخالفة 3 مرات، طرد العضو
-        if (warningCount >= 3) {
-          await ctx.banChatMember(userId);
-          await bot.api.sendMessage(ADMIN_ID,
-            `🚨 **تم طرد عضو بسبب التكرار**\n👤 ${userName}\n🆔 ${userId}\n📊 عدد المخالفات: ${warningCount}`
-          );
-        } else {
-          await bot.api.sendMessage(ADMIN_ID, 
-            `🚫 **مخالفة: ألفاظ بذيئة**\n👤 ${userName}\n🆔 ${userId}\n📝 ${text.substring(0, 100)}\n⚠️ التحذير ${warningCount}/3`
-          );
-        }
-      } catch (error) {
-        console.error('❌ خطأ في حذف رسالة بذيئة:', error);
-      }
+  for (const [key, answer] of Object.entries(smartAnswers)) {
+    if (messageText.includes(key)) {
+      await ctx.reply(answer, {
+        reply_to_message_id: ctx.message.message_id,
+        reply_markup: getNerdChannelKeyboard(),
+      });
       return;
     }
-
-    // ==========================================================
-    // 🛑 منع السبام والإعلانات
-    // ==========================================================
-    if (isSpam(text)) {
-      try {
-        await ctx.deleteMessage();
-        await ctx.reply(`🚫 @${userName}، ممنوع نشر الروابط والإعلانات في المجموعة.`);
-        
-        // طرد العضو فوراً
-        await ctx.banChatMember(userId);
-        await bot.api.sendMessage(ADMIN_ID,
-          `🚨 **تم طرد عضو بسبب السبام**\n👤 ${userName}\n🆔 ${userId}\n📝 ${text.substring(0, 100)}`
-        );
-      } catch (error) {
-        console.error('❌ خطأ في طرد عضو:', error);
-      }
-      return;
-    }
-
-    // ==========================================================
-    // 🤖 الرد الآلي الذكي (Smart Auto-Reply)
-    // ==========================================================
-    const keywordReply = getKeywordReply(text);
-    if (keywordReply) {
-      try {
-        const keyboard = createChannelButton('📢 للمزيد من المعلومات');
-        await ctx.reply(`${keywordReply}`, { 
-          reply_markup: keyboard,
-          parse_mode: 'Markdown'
-        });
-        console.log(`✅ رد آلي على كلمة مفتاحية لـ ${userName}`);
-      } catch (error) {
-        console.error('❌ خطأ في الرد الآلي:', error);
-      }
-    }
-
-    // ==========================================================
-    // 📊 إحصائيات تفاعل الأعضاء
-    // ==========================================================
-    const sessionData = await ctx.session;
-    if (!sessionData.userMessages[userId]) {
-      sessionData.userMessages[userId] = 0;
-    }
-    sessionData.userMessages[userId]++;
-
-    // تحديث الإحصائيات كل 10 رسائل
-    if (sessionData.userMessages[userId] % 10 === 0) {
-      try {
-        await bot.api.sendMessage(ADMIN_ID,
-          `📊 **إحصائية عضو نشط**\n👤 ${userName}\n📝 عدد الرسائل: ${sessionData.userMessages[userId]}\n📍 المجموعة: ${msg.chat.title || 'غير معروف'}`
-        );
-      } catch (error) {
-        console.error('❌ خطأ في إرسال الإحصائيات:', error);
-      }
-    }
-
-  } catch (error) {
-    console.error('❌ خطأ في معالج رسائل المجموعة:', error);
-  }
-});
-
-// ============================================================
-// 🔄 3. إدارة الملف الشخصي والقصص
-// ============================================================
-
-// أوامر إدارة الملف الشخصي (للاستخدام الداخلي)
-bot.command('setname', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    await ctx.reply('⛔ غير مصرح لك باستخدام هذا الأمر.');
-    return;
   }
 
-  const args = ctx.message.text.split(' ');
-  if (args.length < 2) {
-    await ctx.reply('⚠️ الاستخدام: /setname الاسم الجديد');
-    return;
-  }
-
-  const newName = args.slice(1).join(' ');
-  try {
-    await ctx.api.setMyName(newName);
-    await ctx.reply(`✅ تم تغيير الاسم إلى: ${newName}`);
-    await bot.api.sendMessage(ADMIN_ID, `✅ تم تغيير اسم البوت إلى: ${newName}`);
-  } catch (error) {
-    await ctx.reply('❌ فشل تغيير الاسم: ' + error.message);
-  }
-});
-
-bot.command('setbio', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    await ctx.reply('⛔ غير مصرح لك باستخدام هذا الأمر.');
-    return;
-  }
-
-  const bio = ctx.message.text.replace('/setbio', '').trim();
-  if (!bio) {
-    await ctx.reply('⚠️ الاستخدام: /setbio النبذة الجديدة');
-    return;
-  }
-
-  try {
-    await ctx.api.setMyDescription(bio);
-    await ctx.reply(`✅ تم تغيير النبذة إلى: ${bio}`);
-    await bot.api.sendMessage(ADMIN_ID, `✅ تم تغيير نبذة البوت إلى: ${bio}`);
-  } catch (error) {
-    await ctx.reply('❌ فشل تغيير النبذة: ' + error.message);
-  }
-});
-
-bot.command('setusername', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    await ctx.reply('⛔ غير مصرح لك باستخدام هذا الأمر.');
-    return;
-  }
-
-  const username = ctx.message.text.replace('/setusername', '').trim();
-  if (!username) {
-    await ctx.reply('⚠️ الاستخدام: /setusername اسم_المستخدم_الجديد');
-    return;
-  }
-
-  try {
-    await ctx.api.setMyUsername(username.replace('@', ''));
-    await ctx.reply(`✅ تم تغيير اسم المستخدم إلى: @${username.replace('@', '')}`);
-    await bot.api.sendMessage(ADMIN_ID, `✅ تم تغيير اسم المستخدم إلى: @${username.replace('@', '')}`);
-  } catch (error) {
-    await ctx.reply('❌ فشل تغيير اسم المستخدم: ' + error.message);
-  }
-});
-
-bot.command('stats', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    await ctx.reply('⛔ غير مصرح لك باستخدام هذا الأمر.');
-    return;
-  }
-
-  try {
-    const botInfo = await ctx.api.getMe();
-    const webhookInfo = await ctx.api.getWebhookInfo();
-    const translationStats = getTranslationStats();
-    
-    const stats = `
-📊 **إحصائيات البوت**
-
-🤖 **معلومات البوت:**
-- الاسم: ${botInfo.first_name}
-- المعرف: @${botInfo.username}
-- المعرف الرقمي: ${botInfo.id}
-
-📈 **إحصائيات التشغيل:**
-- عدد الترجمات المخزنة: ${translationStats.totalTranslations}
-- استخدام الذاكرة: ${translationStats.memoryUsage.toFixed(2)} MB
-- المستخدمين النشطين: ${userMessages.size}
-- عدد التحذيرات: ${userWarnings.size}
-
-🌐 **معلومات Webhook:**
-- الحالة: ${webhookInfo.url ? '🟢 مفعل' : '🔴 غير مفعل'}
-- الرابط: ${webhookInfo.url || 'غير محدد'}
-
-⏰ الوقت: ${formatTime(Date.now())}
-    `;
-    
-    await ctx.reply(stats, { parse_mode: 'Markdown' });
-  } catch (error) {
-    await ctx.reply('❌ فشل جلب الإحصائيات: ' + error.message);
-  }
-});
-
-bot.command('clear', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    await ctx.reply('⛔ غير مصرح لك باستخدام هذا الأمر.');
-    return;
-  }
-
-  try {
-    // تنظيف جميع البيانات
-    translationCache.clear();
-    userMessages.clear();
-    userWarnings.clear();
-    
-    await ctx.reply('🧹 تم تنظيف جميع البيانات المؤقتة بنجاح!');
-  } catch (error) {
-    await ctx.reply('❌ فشل تنظيف البيانات: ' + error.message);
-  }
-});
-
-// أمر نشر قصة (للاستخدام الداخلي - متكامل مع API)
-bot.command('story', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    await ctx.reply('⛔ غير مصرح لك باستخدام هذا الأمر.');
-    return;
-  }
-
-  const args = ctx.message.text.split(' ');
-  if (args.length < 2) {
-    await ctx.reply(`⚠️ الاستخدام:\n
-/story photo [مدة] - لنشر صورة كقصة
-/story video [مدة] - لنشر فيديو كقصة
-
-المدة المتاحة: 6, 12, 24, 48 (ساعات)`);
-    return;
-  }
-
-  const type = args[1];
-  const duration = parseInt(args[2]) || 24;
-  
-  // تحقق من المدة
-  if (![6, 12, 24, 48].includes(duration)) {
-    await ctx.reply('⚠️ المدة غير صالحة. اختر: 6, 12, 24, 48 ساعة');
-    return;
-  }
-
-  await ctx.reply(`📸 جاري تجهيز نشر ${type} كقصة لمدة ${duration} ساعة...`);
-  await ctx.reply('⚠️ هذه الميزة تتطلب إعدادات إضافية في تليجرام للأعمال.');
-});
-
-// ============================================================
-// 💾 4. استرجاع الوسائط والمحذوفات (Anti-Delete & TTL Backup)
-// ============================================================
-
-// معالج الرسائل المحذوفة (للمحادثات الخاصة)
-bot.on('deleted_business_messages', async (ctx) => {
-  try {
-    const deleted = ctx.deletedBusinessMessages;
-    if (!deleted || !deleted.messages) return;
-
-    console.log(`🗑️ تم حذف ${deleted.messages.length} رسالة من الخاص`);
-
-    for (const msg of deleted.messages) {
-      let alert = `
-🗑️ **رسالة محذوفة من الخاص**
-👤 المستخدم: ${getUserName(msg.from)}
-🆔 المعرف: ${msg.from.id}
-⏰ وقت الحذف: ${formatTime(Date.now())}
-
-📝 المحتوى المحذوف:
-`;
-      
-      if (msg.text) {
-        alert += `${msg.text}`;
-      } else if (msg.photo) {
-        alert += `🖼️ صورة`;
-      } else if (msg.video) {
-        alert += `🎬 فيديو`;
-      } else if (msg.voice) {
-        alert += `🎤 بصمة صوتية`;
-      } else if (msg.video_note) {
-        alert += `📹 ملاحظة فيديو`;
-      } else {
-        alert += `📎 وسائط غير معروفة`;
-      }
-      
-      await bot.api.sendMessage(ADMIN_ID, alert, { parse_mode: 'Markdown' });
-      
-      // إذا كانت الرسالة تحتوي على وسائط، حفظ نسخة
-      if (msg.photo) {
-        try {
-          const fileId = msg.photo[msg.photo.length - 1].file_id;
-          await ctx.api.sendPhoto(ADMIN_ID, fileId, {
-            caption: `🖼️ نسخة محفوظة من ${getUserName(msg.from)}`
-          });
-        } catch (error) {
-          console.error('❌ فشل حفظ الصورة:', error);
-        }
-      } else if (msg.video) {
-        try {
-          await ctx.api.sendVideo(ADMIN_ID, msg.video.file_id, {
-            caption: `🎬 نسخة محفوظة من ${getUserName(msg.from)}`
-          });
-        } catch (error) {
-          console.error('❌ فشل حفظ الفيديو:', error);
-        }
-      } else if (msg.voice) {
-        try {
-          await ctx.api.sendVoice(ADMIN_ID, msg.voice.file_id, {
-            caption: `🎤 نسخة محفوظة من ${getUserName(msg.from)}`
-          });
-        } catch (error) {
-          console.error('❌ فشل حفظ البصمة:', error);
-        }
-      } else if (msg.video_note) {
-        try {
-          await ctx.api.sendVideoNote(ADMIN_ID, msg.video_note.file_id);
-        } catch (error) {
-          console.error('❌ فشل حفظ الملاحظة:', error);
-        }
-      }
-    }
-  } catch (error) {
-    console.error('❌ خطأ في معالج الرسائل المحذوفة:', error);
-  }
-});
-
-// ============================================================
-// 📌 5. أوامر إضافية للمستخدمين
-// ============================================================
-
-bot.command('start', async (ctx) => {
-  const userName = getUserName(ctx.from);
-  const welcomeMsg = `
-👋 **مرحباً ${userName}!**
-
-🤖 أنا بوت المساعدة الذكي للحساب التجاري.
-يمكنني مساعدتك في:
-
-📱 **المحادثات الخاصة:**
-- الرد التلقائي على رسائلك
-- تقديم الدعم والمعلومات
-
-👥 **المجموعات:**
-- حماية المجموعة من السبام
-- الرد على الأسئلة الشائعة
-- منع الكلمات البذيئة
-
-📊 **ميزات إضافية:**
-- ترجمة الرسائل الفورية
-- حفظ الوسائط المهمة
-- إحصائيات التفاعل
-
-🔗 للمزيد من المعلومات، تفضل بزيارة قناتنا:
-  `;
-  
-  const keyboard = new InlineKeyboard()
-    .url('📢 قناة التحديثات', CHANNEL_URL)
-    .row()
-    .url('💬 الدعم', 'https://t.me/SupportBot');
-  
-  await ctx.reply(welcomeMsg, { 
-    reply_markup: keyboard,
-    parse_mode: 'Markdown'
-  });
-});
-
-bot.command('help', async (ctx) => {
-  const helpMsg = `
-🆘 **قائمة المساعدة**
-
-📱 **الأوامر المتاحة:**
-
-🔹 /start - الترحيب والتعريف بالبوت
-🔹 /help - عرض هذه القائمة
-🔹 /support - التواصل مع الدعم
-
-👑 **أوامر الإدارة:**
-🔸 /setname [الاسم] - تغيير اسم البوت
-🔸 /setbio [النبذة] - تغيير نبذة البوت
-🔸 /setusername [اسم] - تغيير اسم المستخدم
-🔸 /stats - عرض إحصائيات البوت
-🔸 /clear - تنظيف البيانات المؤقتة
-🔸 /story [نوع] [مدة] - نشر قصة
-
-📌 **الميزات التلقائية:**
-✅ رد تلقائي في المحادثات الخاصة
-✅ ترجمة فورية للغات الأجنبية
-✅ حماية المجموعات من السبام
-✅ الرد على الكلمات المفتاحية
-✅ حفظ الوسائط المحذوفة
-✅ إحصائيات الأعضاء
-
-🔗 **روابط مهمة:**
-📢 القناة: ${CHANNEL_URL}
-💬 الدعم: @SupportBot
-  `;
-  
-  await ctx.reply(helpMsg, { parse_mode: 'Markdown' });
-});
-
-bot.command('support', async (ctx) => {
-  const supportMsg = `
-💬 **الدعم والمساعدة**
-
-للاستفسارات والدعم، يمكنك:
-
-1️⃣ التواصل مع الإدارة عبر الخاص
-2️⃣ الانضمام إلى قناة التحديثات
-3️⃣ مراسلة بوت الدعم
-
-📢 قناة التحديثات: ${CHANNEL_URL}
-🤖 بوت الدعم: @SupportBot
-
-📧 للتواصل المباشر، يرجى إرسال رسالة خاصة للإدارة.
-  `;
-  
-  const keyboard = new InlineKeyboard()
-    .url('📢 قناة التحديثات', CHANNEL_URL)
-    .row()
-    .url('💬 بوت الدعم', 'https://t.me/SupportBot');
-  
-  await ctx.reply(supportMsg, { 
-    reply_markup: keyboard,
-    parse_mode: 'Markdown'
-  });
-});
-
-// ============================================================
-// 🛡️ 6. معالج الأخطاء العالمي
-// ============================================================
-
-bot.catch((error) => {
-  console.error('❌ خطأ عالمي:', error);
-  
-  // تسجيل الخطأ مع تفاصيل إضافية
-  if (error.message) {
-    console.error('📝 رسالة الخطأ:', error.message);
-  }
-  if (error.stack) {
-    console.error('📚 Stack Trace:', error.stack);
-  }
-});
-
-// ============================================================
-// 🚀 7. إعداد خادم Express و Webhook
-// ============================================================
-
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// نقطة نهاية Webhook
-app.use('/api/webhook', webhookCallback(bot, 'express'));
-
-// صفحة رئيسية للتحقق من صحة الخادم
-app.get('/api', (req, res) => {
-  res.json({
-    status: 'online',
-    bot: 'Telegram Business Bot',
-    version: '2.0.0',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    memory: process.memoryUsage(),
-    translations: translationCache.size
-  });
-});
-
-// صفحة الإحصائيات
-app.get('/api/stats', async (req, res) => {
-  try {
-    const botInfo = await bot.api.getMe();
-    const webhookInfo = await bot.api.getWebhookInfo();
-    const translationStats = getTranslationStats();
-    
-    res.json({
-      bot: {
-        name: botInfo.first_name,
-        username: botInfo.username,
-        id: botInfo.id
-      },
-      stats: {
-        translations: translationStats,
-        users: userMessages.size,
-        warnings: userWarnings.size,
-        memory: process.memoryUsage()
-      },
-      webhook: {
-        url: webhookInfo.url,
-        pending: webhookInfo.pending_update_count
-      },
-      timestamp: new Date().toISOString()
+  if (ctx.message.reply_to_message) {
+    await ctx.reply("تابع جديدنا عبر قناة التحديثات الرسمية:", {
+      reply_to_message_id: ctx.message.message_id,
+      reply_markup: getNerdChannelKeyboard(),
     });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
 });
 
-// معالج الأخطاء العالمي
-app.use((err, req, res, next) => {
-  console.error('❌ خطأ في الخادم:', err);
-  res.status(500).json({ 
-    error: 'حدث خطأ داخلي في الخادم',
-    message: err.message 
+// 5️⃣ أوامر لوحة التحكم الشخصية
+bot.command("start", async (ctx) => {
+  if (ctx.chat.type !== "private") return;
+  const cfg = getAdminConfig(ctx.from.id);
+  await ctx.reply(t(cfg.lang, "welcome"), {
+    reply_markup: getMainMenuKeyboard(cfg.lang),
   });
 });
 
-// ============================================================
-// 📤 8. تصدير الوظيفة الرئيسية لـ Vercel
-// ============================================================
+bot.command("id", async (ctx) => {
+  await ctx.reply(`آيدي حسابك هو:\n\`${ctx.from.id}\``, { parse_mode: "Markdown" });
+});
 
-module.exports = app;
+// 6️⃣ تفاعلات الأزرار واللوحات التفاعلية
+bot.on("callback_query:data", async (ctx) => {
+  const data = ctx.callbackQuery.data;
+  const adminId = ctx.from.id;
+  const cfg = getAdminConfig(adminId);
 
-// ============================================================
-// 📡 9. تعيين Webhook (يتم تشغيله مرة واحدة)
-// ============================================================
+  await ctx.answerCallbackQuery();
 
-async function setupWebhook() {
-  try {
-    const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://your-app.vercel.app/api/webhook';
-    
-    console.log('🔄 جاري تعيين Webhook...');
-    
-    // حذف أي Webhook قديم
-    await bot.api.deleteWebhook();
-    console.log('✅ تم حذف Webhook القديم');
-    
-    // تعيين Webhook جديد
-    const result = await bot.api.setWebhook(WEBHOOK_URL, {
-      allowed_updates: [
-        'message',
-        'edited_message',
-        'callback_query',
-        'business_connection',
-        'business_message',
-        'deleted_business_messages',
-        'managed_bot',
-        'chat_member',
-        'my_chat_member'
-      ],
-      drop_pending_updates: true
+  if (data === "change_quote") {
+    const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
+    await ctx.editMessageReplyMarkup({
+      reply_markup: new InlineKeyboard()
+        .text(`✨ ${randomQuote}`, "change_quote").row()
+        .url("تحديثات نيرد 📢", "https://t.me/Xhwe2"),
     });
-    
-    if (result) {
-      console.log('✅ Webhook تم تعيينه بنجاح');
-      console.log(`🌐 الرابط: ${WEBHOOK_URL}`);
-      
-      // جلب معلومات البوت
-      const me = await bot.api.getMe();
-      console.log(`🤖 البوت: @${me.username}`);
-      console.log(`🆔 معرف البوت: ${me.id}`);
-      
-      // جلب معلومات Webhook للتأكيد
-      const webhookInfo = await bot.api.getWebhookInfo();
-      console.log(`📊 حالة Webhook: ${webhookInfo.url ? '🟢 مفعل' : '🔴 غير مفعل'}`);
-      
-      if (webhookInfo.url) {
-        console.log(`📡 الرابط النشط: ${webhookInfo.url}`);
-        console.log(`⏳ معلقين: ${webhookInfo.pending_update_count}`);
-      }
+    return;
+  }
+
+  if (data === "menu_main") {
+    cfg.state = "";
+    saveAdminConfig(adminId, cfg);
+    await ctx.editMessageText(t(cfg.lang, "main_menu"), {
+      reply_markup: getMainMenuKeyboard(cfg.lang),
+    });
+  } else if (data === "action_stop") {
+    cfg.isStopped = true;
+    cfg.state = "";
+    saveAdminConfig(adminId, cfg);
+    await ctx.editMessageText(t(cfg.lang, "stopped"), {
+      reply_markup: getMainMenuKeyboard(cfg.lang),
+    });
+  } else if (data === "action_start") {
+    cfg.isStopped = false;
+    cfg.state = "";
+    saveAdminConfig(adminId, cfg);
+    await ctx.editMessageText(t(cfg.lang, "started"), {
+      reply_markup: getMainMenuKeyboard(cfg.lang),
+    });
+  } else if (data === "action_edit_text") {
+    cfg.state = "waiting_text";
+    saveAdminConfig(adminId, cfg);
+    await ctx.editMessageText(t(cfg.lang, "edit_prompt"), {
+      reply_markup: getBackKeyboard(cfg.lang),
+    });
+  } else if (data === "action_exclude") {
+    cfg.state = "waiting_exclude_id";
+    saveAdminConfig(adminId, cfg);
+    await ctx.editMessageText(t(cfg.lang, "exclude_prompt"), {
+      reply_markup: getBackKeyboard(cfg.lang),
+    });
+  } else if (data === "action_list_excluded") {
+    let msg = `📋 قائمة المستثنين:\n`;
+    if (!cfg.excluded || cfg.excluded.length === 0) {
+      msg += t(cfg.lang, "no_excluded");
     } else {
-      console.error('❌ فشل تعيين Webhook');
+      msg += cfg.excluded.map((id) => `- \`${id}\``).join("\n");
     }
-    
-  } catch (error) {
-    console.error('❌ فشل تعيين Webhook:', error);
-    console.error('📝 التفاصيل:', error.message);
-    if (error.response) {
-      console.error('📤 استجابة API:', error.response.data);
+    await ctx.editMessageText(msg, {
+      parse_mode: "Markdown",
+      reply_markup: getBackKeyboard(cfg.lang),
+    });
+  } else if (data === "action_clear_excluded") {
+    cfg.excluded = [];
+    saveAdminConfig(adminId, cfg);
+    await ctx.editMessageText(t(cfg.lang, "cleared_excluded"), {
+      reply_markup: getMainMenuKeyboard(cfg.lang),
+    });
+  } else if (data === "menu_profile") {
+    await ctx.editMessageText(t(cfg.lang, "profile_menu"), {
+      reply_markup: getProfileKeyboard(cfg.lang),
+    });
+  } else if (data.startsWith("prof_")) {
+    if (!cfg.businessConnId) {
+      await ctx.editMessageText(t(cfg.lang, "no_biz_conn"), {
+        reply_markup: getProfileKeyboard(cfg.lang),
+      });
+      return;
+    }
+    const field = data.replace("prof_", "");
+    cfg.state = `waiting_prof_${field}`;
+    saveAdminConfig(adminId, cfg);
+    await ctx.editMessageText(`أرسل القيمة الجديدة لـ (${field}):`, {
+      reply_markup: getBackKeyboard(cfg.lang),
+    });
+  } else if (data === "menu_story") {
+    if (!cfg.businessConnId) {
+      await ctx.editMessageText(t(cfg.lang, "no_biz_conn"), {
+        reply_markup: getMainMenuKeyboard(cfg.lang),
+      });
+      return;
+    }
+    await ctx.editMessageText(t(cfg.lang, "story_dur_title"), {
+      reply_markup: getStoryDurationKeyboard(cfg.lang),
+    });
+  } else if (data.startsWith("sdur_")) {
+    const period = data.replace("sdur_", "");
+    cfg.state = `waiting_story_${period}`;
+    saveAdminConfig(adminId, cfg);
+    await ctx.editMessageText(t(cfg.lang, "story_prompt").replace("%s", period + "s"), {
+      reply_markup: getBackKeyboard(cfg.lang),
+    });
+  } else if (data === "lang_ar") {
+    cfg.lang = "ar";
+    saveAdminConfig(adminId, cfg);
+    await ctx.editMessageText(t("ar", "main_menu"), {
+      reply_markup: getMainMenuKeyboard("ar"),
+    });
+  } else if (data === "lang_en") {
+    cfg.lang = "en";
+    saveAdminConfig(adminId, cfg);
+    await ctx.editMessageText(t("en", "main_menu"), {
+      reply_markup: getMainMenuKeyboard("en"),
+    });
+  }
+});
+
+// 7️⃣ معالجة الردود والمدخلات الخاصة للأدمن
+bot.on("message:private", async (ctx, next) => {
+  const adminId = ctx.from.id;
+  const cfg = getAdminConfig(adminId);
+
+  if (!cfg.state) return next();
+
+  if (cfg.state === "waiting_text") {
+    cfg.autoReply = ctx.message.text;
+    cfg.state = "";
+    saveAdminConfig(adminId, cfg);
+    await ctx.reply(t(cfg.lang, "saved_text"), {
+      reply_markup: getMainMenuKeyboard(cfg.lang),
+    });
+  } else if (cfg.state === "waiting_exclude_id") {
+    const exId = parseInt(ctx.message.text.trim());
+    if (!isNaN(exId)) {
+      if (!cfg.excluded.includes(exId)) cfg.excluded.push(exId);
+      cfg.state = "";
+      saveAdminConfig(adminId, cfg);
+      await ctx.reply(t(cfg.lang, "id_added"), {
+        reply_markup: getMainMenuKeyboard(cfg.lang),
+      });
+    }
+  } else if (cfg.state.startsWith("waiting_prof_")) {
+    const field = cfg.state.replace("waiting_prof_", "");
+    try {
+      if (field === "name") {
+        const parts = ctx.message.text.trim().split(" ");
+        await bot.api.raw.setBusinessAccountName({
+          business_connection_id: cfg.businessConnId,
+          first_name: parts[0],
+          last_name: parts.slice(1).join(" ") || undefined,
+        });
+      } else if (field === "bio") {
+        await bot.api.raw.setBusinessAccountBio({
+          business_connection_id: cfg.businessConnId,
+          bio: ctx.message.text.trim(),
+        });
+      } else if (field === "username") {
+        await bot.api.raw.setBusinessAccountUsername({
+          business_connection_id: cfg.businessConnId,
+          username: ctx.message.text.trim().replace("@", ""),
+        });
+      }
+      cfg.state = "";
+      saveAdminConfig(adminId, cfg);
+      await ctx.reply("✅ تم تحديث بيانات الملف الشخصي بنجاح!", {
+        reply_markup: getMainMenuKeyboard(cfg.lang),
+      });
+    } catch (err) {
+      await ctx.reply(`❌ فشل تحديث البيانات: ${err.message}`);
+    }
+  } else if (cfg.state.startsWith("waiting_story_")) {
+    const activePeriod = parseInt(cfg.state.replace("waiting_story_", ""));
+    const photo = ctx.message.photo;
+    const video = ctx.message.video;
+
+    if (!photo && !video) {
+      await ctx.reply("❌ يرجى إرسال صورة أو فيديو لنشره كقصة.");
+      return;
+    }
+
+    try {
+      if (photo) {
+        const fileId = photo[photo.length - 1].file_id;
+        await postBusinessStory(cfg.businessConnId, fileId, "photo", activePeriod);
+      } else if (video) {
+        if (video.duration > 60) {
+          await ctx.reply("❌ الفيديو أطول من 60 ثانية.");
+          return;
+        }
+        await postBusinessStory(cfg.businessConnId, video.file_id, "video", activePeriod);
+      }
+      cfg.state = "";
+      saveAdminConfig(adminId, cfg);
+      await ctx.reply(t(cfg.lang, "story_success"), {
+        reply_markup: getMainMenuKeyboard(cfg.lang),
+      });
+    } catch (err) {
+      await ctx.reply(`❌ فشل نشر القصة: ${err.message}`);
     }
   }
-}
+});
 
-// تشغيل إعداد Webhook عند بدء التشغيل
-if (require.main === module) {
-  console.log('🚀 بدء تشغيل البوت...');
-  setupWebhook();
-  
-  // بدء الخادم المحلي للاختبار
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`🌐 الخادم يعمل على المنفذ ${PORT}`);
-    console.log(`🔗 الرابط المحلي: http://localhost:${PORT}/api`);
+// 8️⃣ ربط وحفظ الاتصالات التجارية وتحديثاتها
+bot.on("business_connection", async (ctx) => {
+  const bc = ctx.update.business_connection;
+  if (bc.is_enabled && bc.user_chat_id) {
+    const cfg = getAdminConfig(bc.user_chat_id);
+    cfg.businessConnId = bc.id;
+    saveAdminConfig(bc.user_chat_id, cfg);
+    memoryCache.set(`conn:${bc.id}`, bc.user_chat_id);
+  }
+});
+
+// 9️⃣ الرد الآلي الخاص، الترجمة الفورية، والنسخ الاحتياطي للوسائط
+bot.on("business_message", async (ctx) => {
+  const msg = ctx.update.business_message;
+  const connId = msg.business_connection_id;
+
+  if (msg.from.is_bot) return;
+
+  const mediaInfo = extractMediaInfo(msg);
+  memoryCache.set(`msg:${msg.chat.id}:${msg.message_id}`, mediaInfo);
+
+  const adminId = memoryCache.get(`conn:${connId}`);
+  if (!adminId) return;
+
+  const cfg = getAdminConfig(adminId);
+
+  if (!msg.is_outgoing && mediaInfo.type !== "text") {
+    const header = t(cfg.lang, "ttl_media_alert")
+      .replace("%s", mediaInfo.fromName)
+      .replace("%d", msg.from.id);
+    await sendMediaToAdmin(adminId, mediaInfo, header);
+  }
+
+  if (msg.is_outgoing || cfg.isStopped || (cfg.excluded && cfg.excluded.includes(msg.from.id))) {
+    return;
+  }
+
+  let detectedLang = "";
+  let translatedText = "";
+  if (msg.text) {
+    const trRes = await translateText(msg.text, "ar");
+    detectedLang = trRes.detectedLang;
+    translatedText = trRes.text;
+
+    if (detectedLang && detectedLang !== "ar") {
+      const alertMsg = `🌐 *رسالة بلغة مترجمة (${detectedLang})*\n👤 *العميل:* ${mediaInfo.fromName} (\`${msg.from.id}\`)\n\n💬 *الأصل:*\n${msg.text}\n\n✨ *الترجمة:*\n${translatedText}`;
+      await bot.api.sendMessage(adminId, alertMsg, { parse_mode: "Markdown" }).catch(() => {});
+    }
+  }
+
+  const customerName = msg.from.first_name || "عميلنا العزيز";
+  let replyText = cfg.autoReply || "أهلاً بك يا {name} 🌸\nاستلمت رسالتك وسأرد عليك في أقرب وقت.";
+  replyText = replyText.replace("{name}", customerName).replace("{الاسم}", customerName);
+
+  if (detectedLang && detectedLang !== "ar") {
+    const trReply = await translateText(replyText, detectedLang);
+    if (trReply.text) replyText = trReply.text;
+  }
+
+  const initialQuote = quotes[Math.floor(Math.random() * quotes.length)];
+
+  await bot.api.sendMessage(msg.chat.id, replyText, {
+    business_connection_id: connId,
+    reply_markup: new InlineKeyboard()
+      .text(`✨ ${initialQuote}`, "change_quote").row()
+      .url("تحديثات نيرد 📢", "https://t.me/Xhwe2"),
   });
-}
+});
 
-// ============================================================
-// 📝 10. معلومات التشغيل والملاحظات
-// ============================================================
-/*
-🔧 إعدادات BotFather المطلوبة:
-1. /setprivacy -> Disable (لقراءة جميع الرسائل)
-2. /setjoingroups -> Enable (للانضمام للمجموعات)
-3. /mybots -> اختر البوت -> Bot Settings -> Secretary Mode -> Enable
-4. /mybots -> اختر البوت -> Bot Settings -> Inline Mode -> Disable
+// 🔟 استرجاع الرسائل والوسائط المحذوفة
+bot.on("deleted_business_messages", async (ctx) => {
+  const dbm = ctx.update.deleted_business_messages;
+  const adminId = memoryCache.get(`conn:${dbm.business_connection_id}`);
+  if (!adminId) return;
 
-📱 إعدادات تليجرام للأعمال:
-1. افتح Settings -> Telegram Business
-2. اختر Chat Assistant -> حدد البوت
-3. فعّل Reply to Messages
-4. اختر All Chats
-5. فعّل Auto-Reply للرسائل الجديدة
+  const cfg = getAdminConfig(adminId);
 
-⚠️ ملاحظات الأمان:
-- احفظ المتغيرات البيئية بشكل آمن
-- استخدم HTTPS للـ Webhook
-- قم بتحديث قوائم الكلمات الممنوعة بانتظام
-- راقب سجلات الأخطاء بشكل دوري
+  for (const msgId of dbm.message_ids) {
+    const cacheKey = `msg:${dbm.chat.id}:${msgId}`;
+    const cached = memoryCache.get(cacheKey);
+    if (cached) {
+      const alertHeader = t(cfg.lang, "deleted_alert")
+        .replace("%s", cached.fromName)
+        .replace("%d", cached.fromId);
 
-📊 الأداء:
-- يستخدم التخزين المؤقت لتقليل طلبات الترجمة
-- يدعم مئات المستخدمين في وقت واحد
-- يعمل بكفاءة على بيئة Vercel Serverless
+      await sendMediaToAdmin(adminId, cached, alertHeader);
+    }
+  }
+});
 
-🆓 الترجمة المجانية:
-- يستخدم @vitalets/google-translate-api بدون API Key
-- يدعم أكثر من 100 لغة
-- مع تخزين مؤقت لتقليل الطلبات
-
-📌 الميزات الرئيسية:
-✅ رد تلقائي خاص مع ترجمة فورية
-✅ حماية المجموعات من السبام والإعلانات
-✅ رد آلي على الكلمات المفتاحية
-✅ حفظ واسترجاع الوسائط المحذوفة
-✅ إدارة الملف الشخصي والقصص
-✅ إحصائيات تفاعل الأعضاء
-✅ أوامر متكاملة للإدارة
-
-💡 نصائح للاستخدام:
-- قم بتحديث قوائم الكلمات الممنوعة بانتظام
-- راقب سجلات الأخطاء لتحسين الأداء
-- استخدم أوامر الإدارة بمسؤولية
-- قم بعمل نسخ احتياطي للبيانات المهمة
-*/
-
-// ============================================================
-// 🏁 نهاية الكود
-// ============================================================
+// تصدير المعالج للعمل على Vercel Serverless
+module.exports = webhookCallback(bot, "http");
