@@ -450,7 +450,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. معالجة محادثة التحكم الخاصة بك
+	// 2. معالجة محادثة التحكم الخاصة بك (الأوامر والرسائل المباشرة للبوت)
 	if update.Message != nil {
 		msg := update.Message
 		chatID := msg.Chat.ID
@@ -582,6 +582,22 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		senderID := msg.From.ID
+		customerChatID := msg.Chat.ID
+
+		// [تعديل هائم] 1: استثناء الآدمن نفسه من استقبال ردود تلقائية أو إشعارات لنفسه
+		if senderID == adminID || customerChatID == adminID {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// [تعديل هائم] 2: تجاهل الأوامر التي تبدأ بـ / (مثل /start) حتى لا يُرد عليها تلقائياً
+		trimmedText := strings.TrimSpace(msg.Text)
+		if strings.HasPrefix(trimmedText, "/") {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
 		config, _ := getConfig(botToken, adminID)
 
 		if config.IsStopped {
@@ -589,8 +605,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		senderID := msg.From.ID
-		customerChatID := msg.Chat.ID
 		for _, exID := range config.Excluded {
 			if exID == senderID || exID == customerChatID {
 				w.WriteHeader(http.StatusOK)
@@ -605,15 +619,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		// --- الترجمة الفورية وتحديد اللغة للرسائل القادمة ---
 		var detectedLang string
-		if strings.TrimSpace(msg.Text) != "" {
-			translatedToAr, dLang, err := translateText(msg.Text, "ar")
+		// عدم الترجمة للأوامر أو الكلمات القصيرة جداً لمنع الكشف الخاطئ للغة
+		if len(trimmedText) > 3 {
+			translatedToAr, dLang, err := translateText(trimmedText, "ar")
 			if err == nil && dLang != "" {
 				detectedLang = dLang
 				// إذا كانت الرسالة بلغة غير العربية، يرسل البوت إشعاراً مترجماً لك في محادثة التحكم
-				if detectedLang != "ar" && adminID != 0 {
+				if detectedLang != "ar" && detectedLang != "und" && adminID != 0 {
 					notifyMsg := fmt.Sprintf(
 						"🌐 *رسالة جديدة بلغة مترجمة (`%s`)*\n👤 *العميل:* %s (`%d`)\n\n💬 *النص الأصلي:*\n%s\n\n✨ *الترجمة للعربية:*\n%s",
-						detectedLang, customerName, senderID, msg.Text, translatedToAr,
+						detectedLang, customerName, senderID, trimmedText, translatedToAr,
 					)
 					sendMessage(botToken, adminID, notifyMsg)
 				}
@@ -621,7 +636,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var replyText string
-		if strings.TrimSpace(msg.Text) == "" {
+		if trimmedText == "" {
 			replyText = "شكراً لتواصلك يا " + customerName + " 🌸\nاستلمت رسالتك وسأرد عليك قريباً."
 		} else if config.AutoReply == "" {
 			replyText = "أهلاً بك يا " + customerName + " 🌸\nأنا غير متوفر الآن، اترك رسالتك وسأرد عليك قريباً."
@@ -632,8 +647,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			replyText = "أهلاً بك يا " + customerName + " 🌸\n" + config.AutoReply
 		}
 
-		// إذا كانت لغة العميل أجنبية، يترجم البوت نص الرد التلقائي إلى لغة العميل تلقائياً قبل إرساله!
-		if detectedLang != "" && detectedLang != "ar" {
+		// إذا كانت لغة العميل أجنبية، يترجم البوت نص الرد التلقائي إلى لغة العميل تلقائياً
+		if detectedLang != "" && detectedLang != "ar" && detectedLang != "und" {
 			if translatedReply, _, err := translateText(replyText, detectedLang); err == nil && translatedReply != "" {
 				replyText = translatedReply
 			}
@@ -790,7 +805,7 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 	}
 }
 
-// دوال إنشاء القوائم والأزرار مع تطبيق الألوان (Danger: أحمر, Success: أخضر, Primary: أزرق)
+// دوال إنشاء القوائم والأزرار مع تطبيق الألوان
 
 func sendMenu(token string, chatID int64, lang, text string) {
 	keyboard := map[string]interface{}{
