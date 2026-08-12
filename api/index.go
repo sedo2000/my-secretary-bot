@@ -44,7 +44,7 @@ var quotes = []string{
 var translations = map[string]map[string]string{
 	"ar": {
 		"main_menu_title":       "القائمة الرئيسية 🤖:",
-		"welcome":               "أهلاً بك في لوحة تحكم البوت 🤖\nاختر من الأزرار أدناه للتحكم الكامل:",
+		"welcome":               "أهلاً بك يا %s هذه لوحة التحكم الخاصة بحسابك 🤖\nاختر من الأزرار أدناه للتحكم الكامل:",
 		"stop_btn":              "🛑 إيقاف الرد",
 		"start_btn":             "🟢 تشغيل الرد",
 		"edit_text_btn":         "📝 تعديل نص الرد",
@@ -60,7 +60,7 @@ var translations = map[string]map[string]string{
 		"started_msg":           "🟢 تم تشغيل الرد التلقائي بنجاح.",
 		"edit_text_prompt":      "📝 أرسل الآن نص الرد التلقائي الجديد:\n(ملاحظة: سيتم إضافة دالة `{name}` تلقائياً إذا لم تقم بكتابتها).",
 		"saved_text_msg":        "✅ تم حفظ نص الرد التلقائي الجديد بنجاح!",
-		"exclude_prompt":        "👤 أرسل ايدي الحساب المراد استثناؤه الآن:\n(يمكن الحصول على الـ ID عبر إرسال أمر `/id` للبوت).",
+		"exclude_prompt":        "👤 أرسل ايدي الحساب المراد استثناؤه الآن:\n(يمكنك أيضاً الضغط على زر User أدناه لتحديد حساب أو بوت لاستخراج ايديه).",
 		"invalid_id_msg":        "❌ أرقام فقط! أرسل الايدي بشكل صحيح.",
 		"id_added_msg":          "✅ تم إضافة الايدي `%d` إلى قائمة الاستثناء.",
 		"list_excluded_title":   "📋 **قائمة الحسابات المستثناة:**\n",
@@ -87,7 +87,7 @@ var translations = map[string]map[string]string{
 		"dur_48h":               "48 ساعة",
 		"story_prompt":          "📖 أرسل الآن صورة أو فيديو (حد أقصى 60 ثانية) لنشره كقصة (ستبقى ظاهرة لمدة %s):",
 		"story_updated":         "✅ تم نشر القصة بنجاح! ستبقى ظاهرة لمدة %s.",
-		"your_id_msg":           "🆔 **الايدي الخاص بك هو:**\n`%d`\n\nاضغط على الزر الملون أدناه لنسخ الـ ID تلقائياً 👇",
+		"your_id_msg":           "🆔 **الايدي الخاص بالحساب:**\n`%d`\n\nاضغط على الزر أدناه لنسخ الـ ID تلقائياً 👇",
 		"fail_name":             "❌ فشل تعديل الاسم: %s",
 		"fail_bio":              "❌ فشل تعديل النبذة: %s",
 		"fail_username":         "❌ فشل تعديل اليوزر: %s",
@@ -99,7 +99,7 @@ var translations = map[string]map[string]string{
 	},
 	"en": {
 		"main_menu_title":       "Main Menu 🤖:",
-		"welcome":               "Welcome to the bot control panel 🤖\nChoose from the buttons below for full control:",
+		"welcome":               "Welcome %s, this is your account control panel 🤖\nChoose from the buttons below for full control:",
 		"stop_btn":              "🛑 Stop Auto-Reply",
 		"start_btn":             "🟢 Start Auto-Reply",
 		"edit_text_btn":         "📝 Edit Reply Text",
@@ -115,7 +115,7 @@ var translations = map[string]map[string]string{
 		"started_msg":           "🟢 Auto-reply has been started.",
 		"edit_text_prompt":      "📝 Send the new auto-reply text now:\n(Note: `{name}` tag will be added automatically if omitted).",
 		"saved_text_msg":        "✅ New auto-reply text saved successfully!",
-		"exclude_prompt":        "👤 Send the account ID to exclude now:\n(You can get the ID by sending `/id` command to the bot).",
+		"exclude_prompt":        "👤 Send the account ID to exclude now:\n(You can also click User button below to pick a user/bot).",
 		"invalid_id_msg":        "❌ Numbers only! Please send a valid ID.",
 		"id_added_msg":          "✅ ID `%d` added to the exclusion list.",
 		"list_excluded_title":   "📋 **Excluded Accounts:**\n",
@@ -142,7 +142,7 @@ var translations = map[string]map[string]string{
 		"dur_48h":               "48 Hours",
 		"story_prompt":          "📖 Send a photo or video now (max 60 seconds) to post as a story (visible for %s):",
 		"story_updated":         "✅ Story posted successfully! It will remain visible for %s.",
-		"your_id_msg":           "🆔 **Your ID is:**\n`%d`\n\nTap the colored button below to copy your ID automatically 👇",
+		"your_id_msg":           "🆔 **Account ID:**\n`%d`\n\nTap the button below to copy the ID automatically 👇",
 		"fail_name":             "❌ Failed to update name: %s",
 		"fail_bio":              "❌ Failed to update bio: %s",
 		"fail_username":         "❌ Failed to update username: %s",
@@ -242,7 +242,23 @@ type InlineKeyboardButton struct {
 	Text         string          `json:"text"`
 	CallbackData string          `json:"callback_data,omitempty"`
 	CopyText     *CopyTextButton `json:"copy_text,omitempty"`
-	Style        string          `json:"style,omitempty"`
+}
+
+type SharedUser struct {
+	UserID    int64  `json:"user_id"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Username  string `json:"username"`
+}
+
+type UsersShared struct {
+	RequestID int32        `json:"request_id"`
+	Users     []SharedUser `json:"users"`
+}
+
+type UserShared struct {
+	RequestID int32 `json:"request_id"`
+	UserID    int64 `json:"user_id"`
 }
 
 type TelegramUpdate struct {
@@ -289,16 +305,19 @@ type Video struct {
 }
 
 type Message struct {
-	MessageID int `json:"message_id"`
-	Chat      struct {
+	MessageID   int          `json:"message_id"`
+	Chat        struct {
 		ID int64 `json:"id"`
 	} `json:"chat"`
-	From struct {
-		ID int64 `json:"id"`
+	From        struct {
+		ID        int64  `json:"id"`
+		FirstName string `json:"first_name"`
 	} `json:"from"`
-	Text  string      `json:"text"`
-	Photo []PhotoSize `json:"photo"`
-	Video *Video      `json:"video"`
+	Text        string       `json:"text"`
+	Photo       []PhotoSize  `json:"photo"`
+	Video       *Video       `json:"video"`
+	UserShared  *UserShared  `json:"user_shared"`
+	UsersShared *UsersShared `json:"users_shared"`
 }
 
 type CallbackQuery struct {
@@ -340,7 +359,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. معالجة الضغط على الأزرار الشفافة
+	// 1. معالجة الضغط على الأزرار الشفافة Inline Buttons
 	if update.CallbackQuery != nil {
 		cb := update.CallbackQuery
 		answerCallback(botToken, cb.ID)
@@ -458,7 +477,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. معالجة محادثة التحكم الخاصة بك (الأوامر والرسائل المباشرة للبوت في الخاصة فقط)
+	// 2. معالجة الرسائل والأوامر والمشاركة من كيبورد User
 	if update.Message != nil {
 		msg := update.Message
 		chatID := msg.Chat.ID
@@ -466,24 +485,44 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		config, msgID := getConfig(botToken, chatID)
 		lang := config.Lang
 
-		if msg.Text == "/start" {
-			config.State = ""
-			saveConfig(botToken, chatID, config, msgID)
-			sendMenu(botToken, chatID, lang, tr(lang, "welcome"))
+		// أ) الاستجابة لمشاركة حساب أو بوت عبر زر User بالكيبورد السفلي
+		if msg.UsersShared != nil && len(msg.UsersShared.Users) > 0 {
+			targetID := msg.UsersShared.Users[0].UserID
+			sendIDMessage(botToken, chatID, targetID, lang)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if msg.UserShared != nil {
+			targetID := msg.UserShared.UserID
+			sendIDMessage(botToken, chatID, targetID, lang)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
+		// ب) أمر /start بترحيب بالصورة والنص والكيبورد
+		if msg.Text == "/start" {
+			config.State = ""
+			saveConfig(botToken, chatID, config, msgID)
+			userName := msg.From.FirstName
+			if userName == "" {
+				userName = "صديقي"
+			}
+			sendStartPhotoMenu(botToken, chatID, userName, lang)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// ج) أمر /id لإرسال الايدي الخاص بك مع زر النسخ تلقائياً
 		if msg.Text == "/id" {
 			sendIDMessage(botToken, chatID, msg.From.ID, lang)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		// معالجة المدخلات حسب حالة المستخدم (بدون أي ردود تلقائية أو ترحيبية خارجية)
+		// د) معالجة التعديلات والإدخالات
 		if config.State == "waiting_text" {
 			replyInput := strings.TrimSpace(msg.Text)
-			// إضافة دالة {name} تلقائياً إذا لم يقم المستخدم بإضافتها
+			// إضافة دالة {name} تلقائياً إذا لم تكن موجودة
 			if !strings.Contains(replyInput, "{name}") && !strings.Contains(replyInput, "{الاسم}") {
 				replyInput = replyInput + " {name}"
 			}
@@ -587,7 +626,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if update.BusinessMessage != nil {
 		msg := update.BusinessMessage
 
-		// تجاهل الرسائل الصادرة من حسابك
 		if msg.IsOutgoing {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -595,7 +633,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		trimmedText := strings.TrimSpace(msg.Text)
 
-		// [تعديل هائم جداً] تجنب التكرار والرد على الأوامر: تجاهل كل أومر يبدأ بـ / (مثل /start) في محادثات البزنس
+		// تجاهل كل أمر يبدأ بـ / في محادثات البزنس لمنع التداخل والتكرار
 		if strings.HasPrefix(trimmedText, "/") {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -610,7 +648,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		senderID := msg.From.ID
 		customerChatID := msg.Chat.ID
 
-		// استثناء حسابك المباشر من الرد
 		if senderID == adminID || customerChatID == adminID {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -623,7 +660,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// استثناء الحسابات المحظورة
 		for _, exID := range config.Excluded {
 			if exID == senderID || exID == customerChatID {
 				w.WriteHeader(http.StatusOK)
@@ -636,7 +672,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			customerName = "صديقي"
 		}
 
-		// --- الترجمة الفورية للأشخاص الأجانب ---
 		var detectedLang string
 		if len(trimmedText) > 3 {
 			translatedToAr, dLang, err := translateText(trimmedText, "ar")
@@ -808,7 +843,55 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 	}
 }
 
-// دالة إرسال الـ ID بزر تفاعلي ملون ومميز للنسخ المباشر
+// دالة الترحيب بطلب /start من خلال صورة مخصصة مع النص والكيبورد
+func sendStartPhotoMenu(token string, chatID int64, userName, lang string) {
+	photoURL := "https://od.lk/s/M18zMzMwODEzNDNfV3R3TEM/IMG_20260810_235848_327.jpg"
+	caption := fmt.Sprintf(tr(lang, "welcome"), userName)
+
+	keyboard := getMainMenuKeyboard(lang)
+
+	payload := map[string]interface{}{
+		"chat_id":      chatID,
+		"photo":        photoURL,
+		"caption":      caption,
+		"parse_mode":   "Markdown",
+		"reply_markup": keyboard,
+	}
+	b, _ := json.Marshal(payload)
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendPhoto", "application/json", bytes.NewBuffer(b))
+
+	// إرسال الكيبورد السفلي الذي يحتوي على زر User
+	sendUserReplyKeyboard(token, chatID)
+}
+
+// إرسال الكيبورد السفلي (Reply Keyboard) بزر User
+func sendUserReplyKeyboard(token string, chatID int64) {
+	keyboard := map[string]interface{}{
+		"keyboard": [][]map[string]interface{}{
+			{
+				{
+					"text": "👤 User",
+					"request_users": map[string]interface{}{
+						"request_id":   1,
+						"max_quantity": 1,
+					},
+				},
+			},
+		},
+		"resize_keyboard": true,
+		"is_persistent":  true,
+	}
+
+	payload := map[string]interface{}{
+		"chat_id":      chatID,
+		"text":         "👇 يمكنك استخدام زر User في الكيبورد أدناه للنسخ واستخراج ايدي أي شخص أو بوت بسهولة:",
+		"reply_markup": keyboard,
+	}
+	b, _ := json.Marshal(payload)
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+}
+
+// دالة إرسال الـ ID بزر النسخ الشفاف التفاعلي
 func sendIDMessage(token string, chatID int64, userID int64, lang string) {
 	idStr := strconv.FormatInt(userID, 10)
 	msgText := fmt.Sprintf(tr(lang, "your_id_msg"), userID)
@@ -817,9 +900,8 @@ func sendIDMessage(token string, chatID int64, userID int64, lang string) {
 		"inline_keyboard": [][]InlineKeyboardButton{
 			{
 				{
-					Text:     fmt.Sprintf("📋 ID: %s (اضغط للنسخ)", idStr),
+					Text:     fmt.Sprintf("📋 Copy ID%s", idStr),
 					CopyText: &CopyTextButton{Text: idStr},
-					Style:    "primary",
 				},
 			},
 		},
@@ -841,13 +923,12 @@ func sendSubMenuWithIDCopy(token string, chatID int64, lang, text string, userID
 		"inline_keyboard": [][]InlineKeyboardButton{
 			{
 				{
-					Text:     fmt.Sprintf("📋 ID الخاص بك: %s (اضغط للنسخ)", idStr),
+					Text:     fmt.Sprintf("📋 Copy ID%s", idStr),
 					CopyText: &CopyTextButton{Text: idStr},
-					Style:    "primary",
 				},
 			},
 			{
-				{Text: tr(lang, "back_btn"), CallbackData: "main_menu", Style: "danger"},
+				{Text: tr(lang, "back_btn"), CallbackData: "main_menu"},
 			},
 		},
 	}
@@ -862,35 +943,39 @@ func sendSubMenuWithIDCopy(token string, chatID int64, lang, text string, userID
 	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
-func sendMenu(token string, chatID int64, lang, text string) {
-	keyboard := map[string]interface{}{
+func getMainMenuKeyboard(lang string) map[string]interface{} {
+	return map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
 			{
-				{"text": tr(lang, "stop_btn"), "callback_data": "stop", "style": "danger"},
-				{"text": tr(lang, "start_btn"), "callback_data": "start", "style": "success"},
+				{"text": tr(lang, "stop_btn"), "callback_data": "stop"},
+				{"text": tr(lang, "start_btn"), "callback_data": "start"},
 			},
 			{
-				{"text": tr(lang, "edit_text_btn"), "callback_data": "edit_text", "style": "primary"},
+				{"text": tr(lang, "edit_text_btn"), "callback_data": "edit_text"},
 			},
 			{
-				{"text": tr(lang, "exclude_btn"), "callback_data": "exclude", "style": "primary"},
-				{"text": tr(lang, "list_excluded_btn"), "callback_data": "list_excluded", "style": "primary"},
+				{"text": tr(lang, "exclude_btn"), "callback_data": "exclude"},
+				{"text": tr(lang, "list_excluded_btn"), "callback_data": "list_excluded"},
 			},
 			{
-				{"text": tr(lang, "clear_excluded_btn"), "callback_data": "clear_excluded", "style": "danger"},
+				{"text": tr(lang, "clear_excluded_btn"), "callback_data": "clear_excluded"},
 			},
 			{
-				{"text": tr(lang, "profile_menu_btn"), "callback_data": "profile_menu", "style": "primary"},
+				{"text": tr(lang, "profile_menu_btn"), "callback_data": "profile_menu"},
 			},
 			{
-				{"text": tr(lang, "post_story_btn"), "callback_data": "post_story", "style": "primary"},
+				{"text": tr(lang, "post_story_btn"), "callback_data": "post_story"},
 			},
 			{
-				{"text": tr(lang, "lang_ar_btn"), "callback_data": "lang_ar", "style": "primary"},
-				{"text": tr(lang, "lang_en_btn"), "callback_data": "lang_en", "style": "primary"},
+				{"text": tr(lang, "lang_ar_btn"), "callback_data": "lang_ar"},
+				{"text": tr(lang, "lang_en_btn"), "callback_data": "lang_en"},
 			},
 		},
 	}
+}
+
+func sendMenu(token string, chatID int64, lang, text string) {
+	keyboard := getMainMenuKeyboard(lang)
 
 	payload := map[string]interface{}{
 		"chat_id":      chatID,
@@ -906,15 +991,15 @@ func sendStoryDurationMenu(token string, chatID int64, lang string) {
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
 			{
-				{"text": "⏱️ " + tr(lang, "dur_6h"), "callback_data": "story_dur_21600", "style": "primary"},
-				{"text": "⏱️ " + tr(lang, "dur_12h"), "callback_data": "story_dur_43200", "style": "primary"},
+				{"text": "⏱️ " + tr(lang, "dur_6h"), "callback_data": "story_dur_21600"},
+				{"text": "⏱️ " + tr(lang, "dur_12h"), "callback_data": "story_dur_43200"},
 			},
 			{
-				{"text": "⏱️ " + tr(lang, "dur_24h"), "callback_data": "story_dur_86400", "style": "primary"},
-				{"text": "⏱️ " + tr(lang, "dur_48h"), "callback_data": "story_dur_172800", "style": "primary"},
+				{"text": "⏱️ " + tr(lang, "dur_24h"), "callback_data": "story_dur_86400"},
+				{"text": "⏱️ " + tr(lang, "dur_48h"), "callback_data": "story_dur_172800"},
 			},
 			{
-				{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"},
+				{"text": tr(lang, "back_btn"), "callback_data": "main_menu"},
 			},
 		},
 	}
@@ -932,11 +1017,11 @@ func sendStoryDurationMenu(token string, chatID int64, lang string) {
 func sendProfileMenu(token string, chatID int64, lang, text string) {
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": tr(lang, "edit_first_name_btn"), "callback_data": "edit_first_name", "style": "primary"}},
-			{{"text": tr(lang, "edit_bio_btn"), "callback_data": "edit_bio", "style": "primary"}},
-			{{"text": tr(lang, "edit_photo_btn"), "callback_data": "edit_photo", "style": "primary"}},
-			{{"text": tr(lang, "edit_username_btn"), "callback_data": "edit_username", "style": "primary"}},
-			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"}},
+			{{"text": tr(lang, "edit_first_name_btn"), "callback_data": "edit_first_name"}},
+			{{"text": tr(lang, "edit_bio_btn"), "callback_data": "edit_bio"}},
+			{{"text": tr(lang, "edit_photo_btn"), "callback_data": "edit_photo"}},
+			{{"text": tr(lang, "edit_username_btn"), "callback_data": "edit_username"}},
+			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu"}},
 		},
 	}
 
@@ -953,7 +1038,7 @@ func sendProfileMenu(token string, chatID int64, lang, text string) {
 func sendSubMenu(token string, chatID int64, lang, text string) {
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"}},
+			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu"}},
 		},
 	}
 
@@ -982,7 +1067,7 @@ func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID st
 
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "✨ " + initialQuote, "callback_data": "change_quote", "style": "primary"}},
+			{{"text": "✨ " + initialQuote, "callback_data": "change_quote"}},
 		},
 	}
 
@@ -999,7 +1084,7 @@ func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID st
 func updateButtonQuote(token string, chatID int64, msgID int, newQuote string) {
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "✨ " + newQuote, "callback_data": "change_quote", "style": "primary"}},
+			{{"text": "✨ " + newQuote, "callback_data": "change_quote"}},
 		},
 	}
 
