@@ -23,10 +23,13 @@ var httpClient = &http.Client{Timeout: 8 * time.Second}
 // عميل بـ timeout أطول لعمليات تنزيل/رفع الصور والفيديوهات
 var mediaClient = &http.Client{Timeout: 30 * time.Second}
 
-// متغيرات نظام التهدئة (Cooldown) للمستخدمين (لمدة 30 دقيقة)
+// متغيرات نظام التهدئة (Cooldown) والتخزين المؤقت لاتصال الأعمال
 var (
 	cooldownMu    sync.Mutex
 	userCooldowns = make(map[int64]map[int64]time.Time) // map[adminID]map[senderID]expiryTime
+
+	bizCacheMu    sync.Mutex
+	bizCache      = make(map[string]int64)
 )
 
 // صورة الترحيب التي تُرسل عند الضغط على /start
@@ -756,6 +759,14 @@ func getAdminIDFromBusinessConn(token string, connID string) int64 {
 	if connID == "" {
 		return 0
 	}
+	
+	bizCacheMu.Lock()
+	if id, ok := bizCache[connID]; ok {
+		bizCacheMu.Unlock()
+		return id
+	}
+	bizCacheMu.Unlock()
+
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/getBusinessConnection?business_connection_id=%s", token, connID)
 	resp, err := httpClient.Get(url)
 	if err != nil {
@@ -769,10 +780,21 @@ func getAdminIDFromBusinessConn(token string, connID string) int64 {
 		log.Println("خطأ فك تشفير getBusinessConnection:", err)
 		return 0
 	}
+	
+	var adminID int64
 	if res.Result.UserChatID != 0 {
-		return res.Result.UserChatID
+		adminID = res.Result.UserChatID
+	} else {
+		adminID = res.Result.User.ID
 	}
-	return res.Result.User.ID
+
+	if adminID != 0 {
+		bizCacheMu.Lock()
+		bizCache[connID] = adminID
+		bizCacheMu.Unlock()
+	}
+
+	return adminID
 }
 
 func getConfig(token string, chatID int64) (BotConfig, int) {
