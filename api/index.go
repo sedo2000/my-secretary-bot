@@ -306,7 +306,6 @@ type SharedUserInfo struct {
 	Username  string `json:"username"`
 }
 
-// الحمولة التي يرسلها تيليجرام عند الضغط على زر "User" ومشاركة مستخدم
 type UsersSharedData struct {
 	RequestID int64            `json:"request_id"`
 	Users     []SharedUserInfo `json:"users"`
@@ -339,7 +338,7 @@ type BusinessConnectionResponse struct {
 	Ok     bool `json:"ok"`
 	Result struct {
 		User struct {
-			ID int64 `json:"id"`
+			ID int64 `json:"user_id"`
 		} `json:"user"`
 		UserChatID int64 `json:"user_chat_id"`
 	} `json:"result"`
@@ -352,7 +351,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- فحص أمني: التحقق من Secret Token الخاص بالـ Webhook ---
 	if secret := os.Getenv("TELEGRAM_WEBHOOK_SECRET"); secret != "" {
 		if r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != secret {
 			log.Println("رفض طلب: secret token غير مطابق")
@@ -501,7 +499,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// معالجة مشاركة مستخدم عبر الزر الأخضر "User"
 		if msg.UsersShared != nil && len(msg.UsersShared.Users) > 0 {
 			su := msg.UsersShared.Users[0]
 			fullName := strings.TrimSpace(su.FirstName + " " + su.LastName)
@@ -637,7 +634,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// لا يعمل الرد التلقائي مطلقاً إذا كان المرسل بوتاً آخر
 		if msg.From.IsBot {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -652,7 +648,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		senderID := msg.From.ID
 		customerChatID := msg.Chat.ID
 
-		// لا يعمل الرد التلقائي إذا كانت الرسالة مرسلة من صاحب الحساب التجاري لنفسه
 		if senderID == adminID {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -660,18 +655,23 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		config, _ := getConfig(botToken, adminID)
 
-		// 🛑 زر "إيقاف الرد": يوقف الرد التلقائي فوراً
 		if config.IsStopped {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		// 👤 الاستثناء بالآيدي
 		for _, exID := range config.Excluded {
 			if exID == senderID || exID == customerChatID {
 				w.WriteHeader(http.StatusOK)
 				return
 			}
+		}
+
+		// الرد على كلمة "بوت" في محادثات الأعمال أيضاً
+		if strings.TrimSpace(msg.Text) == "بوت" || strings.Contains(msg.Text, "بوت") {
+			sendNerdBotInfoBusiness(botToken, customerChatID, msg.BusinessConnectionID)
+			w.WriteHeader(http.StatusOK)
+			return
 		}
 
 		// ⏱️ نظام التهدئة (Cooldown) لمدة 30 دقيقة لكل مستخدم
@@ -684,7 +684,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		// تحديث وقت انتهاء التهدئة بعد 30 دقيقة من الآن
 		userCooldowns[adminID][senderID] = time.Now().Add(30 * time.Minute)
 		cooldownMu.Unlock()
 
@@ -693,7 +692,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			customerName = "صديقي"
 		}
 
-		// --- الترجمة الفورية وتحديد اللغة للرسائل القادمة ---
 		var detectedLang string
 		if strings.TrimSpace(msg.Text) != "" {
 			translatedToAr, dLang, err := translateText(msg.Text, "ar")
@@ -709,14 +707,17 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// --- معالجة نص الرد التلقائي ودعم ومتغيرات الأسماء ($name و {name} و {الاسم}) ---
 		var replyText string
 		if strings.TrimSpace(msg.Text) == "" {
 			replyText = "شكراً لتواصلك يا " + customerName + " 🌸\nاستلمت رسالتك وسأرد عليك قريباً."
 		} else if config.AutoReply == "" {
 			replyText = "أهلاً بك يا " + customerName + " 🌸\nأنا غير متوفر الآن، اترك رسالتك وسأرد عليك قريباً."
-		} else if strings.Contains(config.AutoReply, "{name}") || strings.Contains(config.AutoReply, "{الاسم}") {
-			replyText = strings.ReplaceAll(config.AutoReply, "{name}", customerName)
+		} else if strings.Contains(config.AutoReply, "{name}") || strings.Contains(config.AutoReply, "{الاسم}") || strings.Contains(config.AutoReply, "$name") {
+			replyText = config.AutoReply
+			replyText = strings.ReplaceAll(replyText, "{name}", customerName)
 			replyText = strings.ReplaceAll(replyText, "{الاسم}", customerName)
+			replyText = strings.ReplaceAll(replyText, "$name", customerName)
 		} else {
 			replyText = "أهلاً بك يا " + customerName + " 🌸\n" + config.AutoReply
 		}
@@ -732,7 +733,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. رصد تفعيل/تعديل ربط حساب تجاري جديد بالبوت وإشعار المطوّر
+	// 4. رصد تفعيل ربط حساب تجاري
 	if update.BusinessConnection != nil {
 		bc := update.BusinessConnection
 		if bc.IsEnabled {
@@ -878,15 +879,16 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 	}
 }
 
-// إرسال معلومات البوت عند كتابة "بوت" في الخاص
+// إرسال معلومات البوت في الخاص (مع تلوين الزر "فعلني من هنا")
 func sendNerdBotInfo(token string, chatID int64) {
 	text := "انا اسمي نيرد | Nerd من خلالي رح تقدر تنشر ستوريات غير محدودة بدون اشتراك مميز"
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
 			{
 				{
-					"text": "فعلني من هنا",
-					"url":  "https://t.me/Xhwe2/10",
+					"text":  "فعلني من هنا",
+					"url":   "https://t.me/Xhwe2/10",
+					"style": "success",
 				},
 			},
 		},
@@ -903,7 +905,33 @@ func sendNerdBotInfo(token string, chatID int64) {
 	}
 }
 
-// إرسال صورة الترحيب عند الضغط على /start
+// إرسال معلومات البوت عبر حساب الأعمال (Business Connection)
+func sendNerdBotInfoBusiness(token string, chatID int64, bizID string) {
+	text := "انا اسمي نيرد | Nerd من خلالي رح تقدر تنشر ستوريات غير محدودة بدون اشتراك مميز"
+	keyboard := map[string]interface{}{
+		"inline_keyboard": [][]map[string]interface{}{
+			{
+				{
+					"text":  "فعلني من هنا",
+					"url":   "https://t.me/Xhwe2/10",
+					"style": "success",
+				},
+			},
+		},
+	}
+
+	payload := map[string]interface{}{
+		"chat_id":                chatID,
+		"text":                   text,
+		"business_connection_id": bizID,
+		"reply_markup":           keyboard,
+	}
+	b, _ := json.Marshal(payload)
+	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
+		log.Println("خطأ sendNerdBotInfoBusiness:", err)
+	}
+}
+
 func sendStartPhoto(token string, chatID int64, lang string) {
 	payload := map[string]interface{}{
 		"chat_id": chatID,
