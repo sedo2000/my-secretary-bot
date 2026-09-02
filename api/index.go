@@ -200,7 +200,6 @@ func getDurationLabel(lang, period string) string {
 	}
 }
 
-// دالة الترجمة الفورية والكشف التلقائي عن لغة النص
 func translateText(text, targetLang string) (string, string, error) {
 	if strings.TrimSpace(text) == "" {
 		return "", "", nil
@@ -301,7 +300,6 @@ type Video struct {
 	Duration int    `json:"duration"`
 }
 
-// معلومات مستخدم واحد تم مشاركته عبر زر request_users
 type SharedUserInfo struct {
 	UserID    int64  `json:"user_id"`
 	FirstName string `json:"first_name"`
@@ -309,7 +307,6 @@ type SharedUserInfo struct {
 	Username  string `json:"username"`
 }
 
-// الحمولة التي يرسلها تيليجرام عند الضغط على زر "User" ومشاركة مستخدم
 type UsersSharedData struct {
 	RequestID int64            `json:"request_id"`
 	Users     []SharedUserInfo `json:"users"`
@@ -355,7 +352,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- فحص أمني: التحقق من Secret Token الخاص بالـ Webhook ---
 	if secret := os.Getenv("TELEGRAM_WEBHOOK_SECRET"); secret != "" {
 		if r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != secret {
 			log.Println("رفض طلب: secret token غير مطابق")
@@ -371,7 +367,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. معالجة الضغط على الأزرار الشفافة
 	if update.CallbackQuery != nil {
 		cb := update.CallbackQuery
 		answerCallback(botToken, cb.ID)
@@ -470,6 +465,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			config.StoryTarget = "account"
+			config.TargetChannel = "" // تفريغ القناة لضمان عدم حدوث تداخل
 			config.State = ""
 			saveConfig(botToken, adminID, config, msgID)
 			sendStoryDurationMenu(botToken, adminID, lang)
@@ -502,10 +498,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. معالجة محادثة التحكم الخاصة بك
-	// ملاحظة: هذا الفرع مخصص للتحكم فقط ولا يحتوي إطلاقاً على أي رد تلقائي (AutoReply) —
-	// الرد التلقائي (config.AutoReply) يُستخدم فقط داخل قسم "business_message" أدناه،
-	// وليس في محادثتك الخاصة مع البوت.
 	if update.Message != nil {
 		msg := update.Message
 		chatID := msg.Chat.ID
@@ -513,7 +505,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		config, msgID := getConfig(botToken, chatID)
 		lang := config.Lang
 
-		// معالجة مشاركة مستخدم عبر الزر الأخضر "User"
 		if msg.UsersShared != nil && len(msg.UsersShared.Users) > 0 {
 			su := msg.UsersShared.Users[0]
 			fullName := strings.TrimSpace(su.FirstName + " " + su.LastName)
@@ -637,9 +628,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				}
 
 				if config.StoryTarget == "channel" {
-					err = postStory(botToken, "", config.TargetChannel, mediaType, fileID, duration, period, lang)
+					err = postStoryToChannel(botToken, config.TargetChannel, mediaType, fileID, duration, period, lang)
 				} else {
-					err = postStory(botToken, config.BusinessConnID, "", mediaType, fileID, duration, period, lang)
+					err = postStoryToAccount(botToken, config.BusinessConnID, mediaType, fileID, duration, period, lang)
 				}
 
 				if err != nil {
@@ -657,11 +648,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. معالجة رسائل العملاء (Business Messages)
-	// هنا فقط -- وليس في أي مكان آخر -- يُستخدم نص الرد التلقائي (config.AutoReply).
-	// الرد التلقائي يعمل فقط بين العميل (المستخدم الحقيقي) وصاحب الحساب التجاري،
-	// ويتوقف فوراً في أي من الحالات التالية: زر الإيقاف مفعّل، المرسل مستثنى بالآيدي،
-	// المرسل بوت آخر، أو المرسل هو صاحب الحساب نفسه (رسالة ذاتية).
 	if update.BusinessMessage != nil {
 		msg := update.BusinessMessage
 
@@ -670,7 +656,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// لا يعمل الرد التلقائي مطلقاً إذا كان المرسل بوتاً آخر (وليس عميلاً حقيقياً)
 		if msg.From.IsBot {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -685,7 +670,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		senderID := msg.From.ID
 		customerChatID := msg.Chat.ID
 
-		// لا يعمل الرد التلقائي إذا كانت الرسالة مرسلة من صاحب الحساب التجاري لنفسه
 		if senderID == adminID {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -693,13 +677,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		config, _ := getConfig(botToken, adminID)
 
-		// 🛑 زر "إيقاف الرد": يوقف الرد التلقائي فوراً ولا يُكمل أي كود بعده
 		if config.IsStopped {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		// 👤 الاستثناء بالآيدي: يوقف الرد التلقائي لهذا الحساب تحديداً ولا يُكمل أي كود بعده
 		for _, exID := range config.Excluded {
 			if exID == senderID || exID == customerChatID {
 				w.WriteHeader(http.StatusOK)
@@ -712,13 +694,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			customerName = "صديقي"
 		}
 
-		// --- الترجمة الفورية وتحديد اللغة للرسائل القادمة ---
 		var detectedLang string
 		if strings.TrimSpace(msg.Text) != "" {
 			translatedToAr, dLang, err := translateText(msg.Text, "ar")
 			if err == nil && dLang != "" {
 				detectedLang = dLang
-				// إذا كانت الرسالة بلغة غير العربية، يرسل البوت إشعاراً مترجماً لك في محادثة التحكم
 				if detectedLang != "ar" && adminID != 0 {
 					notifyMsg := fmt.Sprintf(
 						"🌐 *رسالة جديدة بلغة مترجمة (`%s`)*\n👤 *العميل:* %s (`%d`)\n\n💬 *النص الأصلي:*\n%s\n\n✨ *الترجمة للعربية:*\n%s",
@@ -741,7 +721,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			replyText = "أهلاً بك يا " + customerName + " 🌸\n" + config.AutoReply
 		}
 
-		// إذا كانت لغة العميل أجنبية، يترجم البوت نص الرد التلقائي إلى لغة العميل تلقائياً قبل إرساله!
 		if detectedLang != "" && detectedLang != "ar" {
 			if translatedReply, _, err := translateText(replyText, detectedLang); err == nil && translatedReply != "" {
 				replyText = translatedReply
@@ -753,7 +732,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. رصد تفعيل/تعديل ربط حساب تجاري جديد بالبوت وإشعار المطوّر
 	if update.BusinessConnection != nil {
 		bc := update.BusinessConnection
 		if bc.IsEnabled {
@@ -899,9 +877,6 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 	}
 }
 
-// دوال إنشاء القوائم والأزرار مع تطبيق الألوان (Danger: أحمر, Success: أخضر, Primary: أزرق)
-
-// إرسال صورة الترحيب عند الضغط على /start
 func sendStartPhoto(token string, chatID int64, lang string) {
 	payload := map[string]interface{}{
 		"chat_id": chatID,
@@ -914,9 +889,6 @@ func sendStartPhoto(token string, chatID int64, lang string) {
 	}
 }
 
-// إرسال لوحة مفاتيح ثابتة تحتوي على الزر الأخضر "User" لمشاركة مستخدم
-// عند الضغط عليه يفتح تيليجرام قائمة جهات الاتصال لدى المستخدم، وعند اختيار أحدهم
-// يتم إرسال ايديه ويوزره واسمه تلقائياً إلى البوت (يُعالج ذلك في msg.UsersShared).
 func sendUserShareKeyboard(token string, chatID int64, lang string) {
 	keyboard := map[string]interface{}{
 		"keyboard": [][]map[string]interface{}{
@@ -971,7 +943,6 @@ func sendMenu(token string, chatID int64, lang, text string) {
 				{"text": tr(lang, "post_story_btn"), "callback_data": "post_story", "style": "primary"},
 			},
 			{
-				// زر ملوّن: يقوم بنسخ ايدي المستخدم تلقائياً للحافظة عند الضغط عليه
 				{
 					"text": fmt.Sprintf("%s (%d)", tr(lang, "id_copy_btn"), chatID),
 					"copy_text": map[string]interface{}{
@@ -1179,8 +1150,6 @@ func notifyDeveloper(token string, userID int64, firstName, lastName, username s
 	sendMessage(token, devID, text)
 }
 
-// --- دوال إدارة الملف الشخصي والقصص عبر Telegram Business API ---
-
 type apiResult struct {
 	Ok          bool   `json:"ok"`
 	Description string `json:"description"`
@@ -1342,7 +1311,11 @@ func setBusinessAccountProfilePhoto(token, businessConnID, fileID string) error 
 	return postMultipartBusinessAPI(token, "setBusinessAccountProfilePhoto", fields, "photo", "photo.jpg", data)
 }
 
-func postStory(token, businessConnID, chatIDTarget, mediaType, fileID string, durationSeconds int, activePeriod string, lang string) error {
+// دالة مخصصة وآمنة تماماً لنشر القصة في الحساب التجاري
+func postStoryToAccount(token, businessConnID, mediaType, fileID string, durationSeconds int, activePeriod string, lang string) error {
+	if businessConnID == "" {
+		return fmt.Errorf(tr(lang, "no_business_connection"))
+	}
 	if mediaType == "video" && durationSeconds > 60 {
 		return fmt.Errorf(tr(lang, "video_too_long_error"))
 	}
@@ -1370,15 +1343,49 @@ func postStory(token, businessConnID, chatIDTarget, mediaType, fileID string, du
 	}
 
 	fields := map[string]string{
-		"content":       contentJSON,
-		"active_period": activePeriod,
+		"business_connection_id": businessConnID,
+		"content":                contentJSON,
+		"active_period":          activePeriod,
 	}
 
-	// تحديد مكان النشر بناءً على المدخلات
-	if businessConnID != "" {
-		fields["business_connection_id"] = businessConnID
-	} else if chatIDTarget != "" {
-		fields["chat_id"] = chatIDTarget
+	return postMultipartBusinessAPI(token, "postStory", fields, "content", fileName, data)
+}
+
+// دالة مخصصة وآمنة تماماً لنشر القصة في القناة (لا ترسل business_connection_id نهائياً لتجنب الخطأ)
+func postStoryToChannel(token, chatIDTarget, mediaType, fileID string, durationSeconds int, activePeriod string, lang string) error {
+	if chatIDTarget == "" {
+		return fmt.Errorf("معرف القناة غير صالح")
+	}
+	if mediaType == "video" && durationSeconds > 60 {
+		return fmt.Errorf(tr(lang, "video_too_long_error"))
+	}
+
+	data, err := downloadTelegramFile(token, fileID)
+	if err != nil {
+		return err
+	}
+
+	var contentJSON, fileName string
+	if mediaType == "video" {
+		if durationSeconds > 0 {
+			contentJSON = fmt.Sprintf(`{"type":"video","video":"attach://content","duration":%d}`, durationSeconds)
+		} else {
+			contentJSON = `{"type":"video","video":"attach://content"}`
+		}
+		fileName = "story.mp4"
+	} else {
+		contentJSON = `{"type":"photo","photo":"attach://content"}`
+		fileName = "story.jpg"
+	}
+
+	if activePeriod == "" {
+		activePeriod = "86400"
+	}
+
+	fields := map[string]string{
+		"chat_id":       chatIDTarget,
+		"content":       contentJSON,
+		"active_period": activePeriod,
 	}
 
 	return postMultipartBusinessAPI(token, "postStory", fields, "content", fileName, data)
