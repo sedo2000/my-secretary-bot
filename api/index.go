@@ -28,8 +28,8 @@ var (
 	cooldownMu    sync.Mutex
 	userCooldowns = make(map[int64]map[int64]time.Time) // map[adminID]map[senderID]expiryTime
 
-	bizCacheMu sync.Mutex
-	bizCache   = make(map[string]int64)
+	bizCacheMu    sync.Mutex
+	bizCache      = make(map[string]int64)
 )
 
 // صورة الترحيب التي تُرسل عند الضغط على /start
@@ -56,130 +56,124 @@ var quotes = []string{
 // --- قاموس الترجمة: عربي (افتراضي) وإنجليزي ---
 var translations = map[string]map[string]string{
 	"ar": {
-		"main_menu_title":       "القائمة الرئيسية 🤖:",
+		"main_menu_title":        "القائمة الرئيسية 🤖:",
 		"welcome":                "أهلاً بك في لوحة تحكم البوت 🤖\nاختر من الأزرار أدناه للتحكم الكامل:",
-		"stop_btn":               "🛑 إيقاف الرد",
-		"start_btn":              "🟢 تشغيل الرد",
-		"edit_text_btn":          "📝 تعديل نص الرد",
-		"exclude_btn":            "👤 استثناء حساب",
-		"list_excluded_btn":      "📋 عرض المستثنين",
-		"clear_excluded_btn":     "🧹 مسح المستثنين",
-		"profile_menu_btn":       "🧑 إدارة الملف الشخصي",
-		"post_story_btn":         "📖 نشر قصة",
-		"lang_ar_btn":            "🇮🇶 العربية",
-		"lang_en_btn":            "🇺🇸 English",
-		"back_btn":               "🔙 رجوع",
-		"stopped_msg":            "🛑 تم إيقاف الرد التلقائي بنجاح.",
-		"started_msg":            "🟢 تم تشغيل الرد التلقائي بنجاح.",
-		"edit_text_prompt":       "📝 أرسل الآن نص الرد التلقائي الجديد:",
-		"saved_text_msg":         "✅ تم حفظ نص الرد التلقائي الجديد بنجاح!",
-		"exclude_prompt":         "👤 أرسل ايدي الحساب المراد استثناؤه الآن:",
-		"invalid_id_msg":         "❌ أرقام فقط! أرسل الايدي بشكل صحيح.",
-		"id_added_msg":           "✅ تم إضافة الايدي `%d` إلى قائمة الاستثناء.",
-		"list_excluded_title":    "📋 **قائمة الحسابات المستثناة:**\n",
-		"no_excluded":            "لا يوجد حسابات مستثناة حالياً.",
-		"cleared_excluded_msg":   "🧹 تم مسح جميع الاستثناءات بنجاح.",
-		"profile_menu_title":     "🧑 إدارة الملف الشخصي - اختر ما تريد تعديله:",
-		"edit_first_name_btn":    "✏️ تعديل الاسم",
-		"edit_bio_btn":           "📝 تعديل النبذة",
-		"edit_photo_btn":         "🖼️ تعديل الصورة",
-		"edit_username_btn":      "🔗 تعديل اليوزر",
-		"no_business_connection": "❌ لم يتم ربط حساب تجاري بعد بالبوت.",
-		"first_name_prompt":      "✏️ أرسل الآن الاسم الأول الجديد (والاسم الأخير بعده بمسافة، اختياري):",
-		"bio_prompt":             "📝 أرسل الآن النبذة الجديدة (حد أقصى 70 حرف):",
-		"username_prompt":        "🔗 أرسل الآن اسم المستخدم الجديد (بدون @):",
-		"photo_prompt":           "🖼️ أرسل الآن الصورة الجديدة لملفك الشخصي:",
-		"name_updated":           "✅ تم تعديل الاسم بنجاح!",
-		"bio_updated":            "✅ تم تعديل النبذة بنجاح!",
-		"username_updated":       "✅ تم تعديل اسم المستخدم بنجاح!",
-		"photo_updated":          "✅ تم تعديل صورة الملف الشخصي بنجاح!",
-		"select_story_duration":  "⏱️ اختر مدة ظهور القصة المطلوبة:",
-		"dur_6h":                 "6 ساعات",
-		"dur_12h":                "12 ساعة",
-		"dur_24h":                "24 ساعة",
-		"dur_48h":                "48 ساعة",
-		"story_prompt":           "📖 أرسل الآن صورة أو فيديو (حد أقصى 60 ثانية) لنشره كقصة، أو أرسل رابط منشور من إحدى القنوات (مثال: https://t.me/channel/123) وسيقوم البوت بإعادة توجيهه ونشره كقصة تلقائياً (ستبقى ظاهرة لمدة %s):\n\n⚠️ يجب أن يكون البوت مضافاً كمشرف في القناة مع صلاحية «قراءة الرسائل» و«إدارة الرسائل» حتى يعمل خيار الرابط.",
-		"story_updated":          "✅ تم نشر القصة بنجاح! ستبقى ظاهرة لمدة %s.",
-		"your_id_msg":            "الايدي الخاص بك هو:\n`%d`",
-		"fail_name":              "❌ فشل تعديل الاسم: %s",
-		"fail_bio":               "❌ فشل تعديل النبذة: %s",
-		"fail_username":          "❌ فشل تعديل اليوزر: %s",
-		"fail_photo":             "❌ فشل تعديل الصورة: %s",
-		"fail_story":             "❌ فشل نشر القصة: %s",
-		"need_real_photo":        "❌ أرسل صورة فعلية (لا يقبل ملفات أو نصوص).",
-		"need_real_media_story":  "❌ أرسل صورة أو فيديو فعلي، أو رابط منشور من قناة، لنشره كقصة.",
-		"video_too_long_error":   "الفيديو أطول من 60 ثانية، وهذا الحد الأقصى المسموح لقصص تليجرام",
-		"invalid_link_msg":       "❌ الرابط الذي أرسلته غير صالح. تأكد أنه رابط منشور تيليجرام صحيح مثل:\nhttps://t.me/channel/123\nأو https://t.me/c/1234567890/123",
-		"link_fetch_failed":      "❌ لم يتمكن البوت من جلب المنشور من القناة. تأكد أن البوت مضاف كمشرف في القناة مع صلاحية قراءة وإدارة الرسائل، وأن الرابط صحيح.",
-		"link_no_media":          "❌ المنشور الذي أرسلت رابطه لا يحتوي على صورة أو فيديو صالح للنشر كقصة.",
-		"id_copy_btn":            "🆔 نسخ الآيدي",
-		"share_user_btn":         "👤 User",
-		"share_user_prompt":      "👇 استخدم هذا الزر لمشاركة أي مستخدم من قائمة محادثاتك مع البوت، وسيتم استخراج اسمه ويوزره وآيديه تلقائياً:",
-		"user_shared_info":       "👤 *معلومات المستخدم المُشارك:*\n\nالاسم: %s\nاليوزر: %s\nالآيدي: `%d`",
-		"no_username":            "لا يوجد يوزر",
+		"stop_btn":                "🛑 إيقاف الرد",
+		"start_btn":               "🟢 تشغيل الرد",
+		"edit_text_btn":           "📝 تعديل نص الرد",
+		"exclude_btn":             "👤 استثناء حساب",
+		"list_excluded_btn":       "📋 عرض المستثنين",
+		"clear_excluded_btn":      "🧹 مسح المستثنين",
+		"profile_menu_btn":        "🧑 إدارة الملف الشخصي",
+		"post_story_btn":          "📖 نشر قصة",
+		"lang_ar_btn":             "🇮🇶 العربية",
+		"lang_en_btn":             "🇺🇸 English",
+		"back_btn":                "🔙 رجوع",
+		"stopped_msg":             "🛑 تم إيقاف الرد التلقائي بنجاح.",
+		"started_msg":             "🟢 تم تشغيل الرد التلقائي بنجاح.",
+		"edit_text_prompt":        "📝 أرسل الآن نص الرد التلقائي الجديد:",
+		"saved_text_msg":          "✅ تم حفظ نص الرد التلقائي الجديد بنجاح!",
+		"exclude_prompt":          "👤 أرسل ايدي الحساب المراد استثناؤه الآن:",
+		"invalid_id_msg":          "❌ أرقام فقط! أرسل الايدي بشكل صحيح.",
+		"id_added_msg":            "✅ تم إضافة الايدي `%d` إلى قائمة الاستثناء.",
+		"list_excluded_title":     "📋 **قائمة الحسابات المستثناة:**\n",
+		"no_excluded":             "لا يوجد حسابات مستثناة حالياً.",
+		"cleared_excluded_msg":    "🧹 تم مسح جميع الاستثناءات بنجاح.",
+		"profile_menu_title":      "🧑 إدارة الملف الشخصي - اختر ما تريد تعديله:",
+		"edit_first_name_btn":     "✏️ تعديل الاسم",
+		"edit_bio_btn":            "📝 تعديل النبذة",
+		"edit_photo_btn":          "🖼️ تعديل الصورة",
+		"edit_username_btn":       "🔗 تعديل اليوزر",
+		"no_business_connection":  "❌ لم يتم ربط حساب تجاري بعد بالبوت.",
+		"first_name_prompt":       "✏️ أرسل الآن الاسم الأول الجديد (والاسم الأخير بعده بمسافة، اختياري):",
+		"bio_prompt":              "📝 أرسل الآن النبذة الجديدة (حد أقصى 70 حرف):",
+		"username_prompt":         "🔗 أرسل الآن اسم المستخدم الجديد (بدون @):",
+		"photo_prompt":            "🖼️ أرسل الآن الصورة الجديدة لملفك الشخصي:",
+		"name_updated":            "✅ تم تعديل الاسم بنجاح!",
+		"bio_updated":             "✅ تم تعديل النبذة بنجاح!",
+		"username_updated":        "✅ تم تعديل اسم المستخدم بنجاح!",
+		"photo_updated":           "✅ تم تعديل صورة الملف الشخصي بنجاح!",
+		"select_story_duration":   "⏱️ اختر مدة ظهور القصة المطلوبة:",
+		"dur_6h":                  "6 ساعات",
+		"dur_12h":                 "12 ساعة",
+		"dur_24h":                 "24 ساعة",
+		"dur_48h":                 "48 ساعة",
+		"story_prompt":            "📖 أرسل الآن صورة أو فيديو (حد أقصى 60 ثانية) لنشره كقصة (ستبقى ظاهرة لمدة %s):",
+		"story_updated":           "✅ تم نشر القصة بنجاح! ستبقى ظاهرة لمدة %s.",
+		"your_id_msg":             "الايدي الخاص بك هو:\n`%d`",
+		"fail_name":               "❌ فشل تعديل الاسم: %s",
+		"fail_bio":                "❌ فشل تعديل النبذة: %s",
+		"fail_username":           "❌ فشل تعديل اليوزر: %s",
+		"fail_photo":              "❌ فشل تعديل الصورة: %s",
+		"fail_story":              "❌ فشل نشر القصة: %s",
+		"need_real_photo":         "❌ أرسل صورة فعلية (لا يقبل ملفات أو نصوص).",
+		"need_real_media_story":   "❌ أرسل صورة أو فيديو فعلي لنشره كقصة.",
+		"video_too_long_error":    "الفيديو أطول من 60 ثانية، وهذا الحد الأقصى المسموح لقصص تليجرام",
+		"id_copy_btn":             "🆔 نسخ الآيدي",
+		"share_user_btn":          "👤 User",
+		"share_user_prompt":       "👇 استخدم هذا الزر لمشاركة أي مستخدم من قائمة محادثاتك مع البوت، وسيتم استخراج اسمه ويوزره وآيديه تلقائياً:",
+		"user_shared_info":        "👤 *معلومات المستخدم المُشارك:*\n\nالاسم: %s\nاليوزر: %s\nالآيدي: `%d`",
+		"no_username":             "لا يوجد يوزر",
 	},
 	"en": {
-		"main_menu_title":       "Main Menu 🤖:",
+		"main_menu_title":        "Main Menu 🤖:",
 		"welcome":                "Welcome to the bot control panel 🤖\nChoose from the buttons below for full control:",
-		"stop_btn":               "🛑 Stop Auto-Reply",
-		"start_btn":              "🟢 Start Auto-Reply",
-		"edit_text_btn":          "📝 Edit Reply Text",
-		"exclude_btn":            "👤 Exclude Account",
-		"list_excluded_btn":      "📋 View Excluded",
-		"clear_excluded_btn":     "🧹 Clear Excluded",
-		"profile_menu_btn":       "🧑 Manage Profile",
-		"post_story_btn":         "📖 Post Story",
-		"lang_ar_btn":            "🇮🇶 العربية",
-		"lang_en_btn":            "🇺🇸 English",
-		"back_btn":               "🔙 Back",
-		"stopped_msg":            "🛑 Auto-reply has been stopped.",
-		"started_msg":            "🟢 Auto-reply has been started.",
-		"edit_text_prompt":       "📝 Send the new auto-reply text now:",
-		"saved_text_msg":         "✅ New auto-reply text saved successfully!",
-		"exclude_prompt":         "👤 Send the account ID to exclude now:",
-		"invalid_id_msg":         "❌ Numbers only! Please send a valid ID.",
-		"id_added_msg":           "✅ ID `%d` added to the exclusion list.",
-		"list_excluded_title":    "📋 **Excluded Accounts:**\n",
-		"no_excluded":            "No excluded accounts currently.",
-		"cleared_excluded_msg":   "🧹 All exclusions cleared successfully.",
-		"profile_menu_title":     "🧑 Manage Profile - choose what to edit:",
-		"edit_first_name_btn":    "✏️ Edit Name",
-		"edit_bio_btn":           "📝 Edit Bio",
-		"edit_photo_btn":         "🖼️ Edit Photo",
-		"edit_username_btn":      "🔗 Edit Username",
-		"no_business_connection": "❌ No business account connected to the bot yet.",
-		"first_name_prompt":      "✏️ Send the new first name now (optionally followed by a last name):",
-		"bio_prompt":             "📝 Send the new bio now (max 70 characters):",
-		"username_prompt":        "🔗 Send the new username now (without @):",
-		"photo_prompt":           "🖼️ Send the new profile photo now:",
-		"name_updated":           "✅ Name updated successfully!",
-		"bio_updated":            "✅ Bio updated successfully!",
-		"username_updated":       "✅ Username updated successfully!",
-		"photo_updated":          "✅ Profile photo updated successfully!",
-		"select_story_duration":  "⏱️ Select story duration:",
-		"dur_6h":                 "6 Hours",
-		"dur_12h":                "12 Hours",
-		"dur_24h":                "24 Hours",
-		"dur_48h":                "48 Hours",
-		"story_prompt":           "📖 Send a photo or video now (max 60 seconds) to post as a story, or send a channel post link (e.g. https://t.me/channel/123) and the bot will fetch and repost it as your story automatically (visible for %s):\n\n⚠️ The bot must be added as an admin in the channel with 'Read Messages' and 'Manage Messages' permissions for the link option to work.",
-		"story_updated":          "✅ Story posted successfully! It will remain visible for %s.",
-		"your_id_msg":            "Your ID is:\n`%d`",
-		"fail_name":              "❌ Failed to update name: %s",
-		"fail_bio":               "❌ Failed to update bio: %s",
-		"fail_username":          "❌ Failed to update username: %s",
-		"fail_photo":             "❌ Failed to update photo: %s",
-		"fail_story":             "❌ Failed to post story: %s",
-		"need_real_photo":        "❌ Please send an actual photo (files or text not accepted).",
-		"need_real_media_story":  "❌ Please send an actual photo, video, or a channel post link to post as a story.",
-		"video_too_long_error":   "The video is longer than 60 seconds, which is Telegram's maximum allowed for stories",
-		"invalid_link_msg":       "❌ The link you sent is invalid. Make sure it's a valid Telegram post link like:\nhttps://t.me/channel/123\nor https://t.me/c/1234567890/123",
-		"link_fetch_failed":      "❌ The bot could not fetch the post from the channel. Make sure the bot is an admin in the channel with 'Read Messages' and 'Manage Messages' permissions, and that the link is correct.",
-		"link_no_media":          "❌ The post you linked does not contain a valid photo or video to post as a story.",
-		"id_copy_btn":            "🆔 Copy ID",
-		"share_user_btn":         "👤 User",
-		"share_user_prompt":      "👇 Use this button to share any user from your chat list with the bot — their name, username and ID will be extracted automatically:",
-		"user_shared_info":       "👤 *Shared User Info:*\n\nName: %s\nUsername: %s\nID: `%d`",
-		"no_username":            "No username",
+		"stop_btn":                "🛑 Stop Auto-Reply",
+		"start_btn":               "🟢 Start Auto-Reply",
+		"edit_text_btn":           "📝 Edit Reply Text",
+		"exclude_btn":             "👤 Exclude Account",
+		"list_excluded_btn":       "📋 View Excluded",
+		"clear_excluded_btn":      "🧹 Clear Excluded",
+		"profile_menu_btn":        "🧑 Manage Profile",
+		"post_story_btn":          "📖 Post Story",
+		"lang_ar_btn":             "🇮🇶 العربية",
+		"lang_en_btn":             "🇺🇸 English",
+		"back_btn":                "🔙 Back",
+		"stopped_msg":             "🛑 Auto-reply has been stopped.",
+		"started_msg":             "🟢 Auto-reply has been started.",
+		"edit_text_prompt":        "📝 Send the new auto-reply text now:",
+		"saved_text_msg":          "✅ New auto-reply text saved successfully!",
+		"exclude_prompt":          "👤 Send the account ID to exclude now:",
+		"invalid_id_msg":          "❌ Numbers only! Please send a valid ID.",
+		"id_added_msg":            "✅ ID `%d` added to the exclusion list.",
+		"list_excluded_title":     "📋 **Excluded Accounts:**\n",
+		"no_excluded":             "No excluded accounts currently.",
+		"cleared_excluded_msg":    "🧹 All exclusions cleared successfully.",
+		"profile_menu_title":      "🧑 Manage Profile - choose what to edit:",
+		"edit_first_name_btn":     "✏️ Edit Name",
+		"edit_bio_btn":            "📝 Edit Bio",
+		"edit_photo_btn":          "🖼️ Edit Photo",
+		"edit_username_btn":       "🔗 Edit Username",
+		"no_business_connection":  "❌ No business account connected to the bot yet.",
+		"first_name_prompt":       "✏️ Send the new first name now (optionally followed by a last name):",
+		"bio_prompt":              "📝 Send the new bio now (max 70 characters):",
+		"username_prompt":         "🔗 Send the new username now (without @):",
+		"photo_prompt":            "🖼️ Send the new profile photo now:",
+		"name_updated":            "✅ Name updated successfully!",
+		"bio_updated":             "✅ Bio updated successfully!",
+		"username_updated":        "✅ Username updated successfully!",
+		"photo_updated":           "✅ Profile photo updated successfully!",
+		"select_story_duration":   "⏱️ Select story duration:",
+		"dur_6h":                  "6 Hours",
+		"dur_12h":                 "12 Hours",
+		"dur_24h":                 "24 Hours",
+		"dur_48h":                 "48 Hours",
+		"story_prompt":            "📖 Send a photo or video now (max 60 seconds) to post as a story (visible for %s):",
+		"story_updated":           "✅ Story posted successfully! It will remain visible for %s.",
+		"your_id_msg":             "Your ID is:\n`%d`",
+		"fail_name":               "❌ Failed to update name: %s",
+		"fail_bio":                "❌ Failed to update bio: %s",
+		"fail_username":           "❌ Failed to update username: %s",
+		"fail_photo":              "❌ Failed to update photo: %s",
+		"fail_story":              "❌ Failed to post story: %s",
+		"need_real_photo":         "❌ Please send an actual photo (files or text not accepted).",
+		"need_real_media_story":   "❌ Please send an actual photo or video to post as a story.",
+		"video_too_long_error":    "The video is longer than 60 seconds, which is Telegram's maximum allowed for stories",
+		"id_copy_btn":             "🆔 Copy ID",
+		"share_user_btn":          "👤 User",
+		"share_user_prompt":       "👇 Use this button to share any user from your chat list with the bot — their name, username and ID will be extracted automatically:",
+		"user_shared_info":        "👤 *Shared User Info:*\n\nName: %s\nUsername: %s\nID: `%d`",
+		"no_username":             "No username",
 	},
 }
 
@@ -276,9 +270,9 @@ type TelegramUpdate struct {
 			FirstName string `json:"first_name"`
 			IsBot     bool   `json:"is_bot"`
 		} `json:"from"`
-		Text                  string `json:"text"`
-		IsOutgoing            bool   `json:"is_outgoing"`
-		BusinessConnectionID  string `json:"business_connection_id"`
+		Text                 string `json:"text"`
+		IsOutgoing           bool   `json:"is_outgoing"`
+		BusinessConnectionID string `json:"business_connection_id"`
 	} `json:"business_message"`
 	BusinessConnection *struct {
 		ID   string `json:"id"`
@@ -351,17 +345,6 @@ type BusinessConnectionResponse struct {
 		} `json:"user"`
 		UserChatID int64 `json:"user_chat_id"`
 	} `json:"result"`
-}
-
-// رد forwardMessage عند جلب منشور من القناة عبر الرابط
-type ForwardedMessageResponse struct {
-	Ok     bool `json:"ok"`
-	Result struct {
-		MessageID int         `json:"message_id"`
-		Photo     []PhotoSize `json:"photo"`
-		Video     *Video      `json:"video"`
-	} `json:"result"`
-	Description string `json:"description"`
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
@@ -620,40 +603,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			}
 		} else if strings.HasPrefix(config.State, "waiting_story_") {
 			period := strings.TrimPrefix(config.State, "waiting_story_")
-			linkText := strings.TrimSpace(msg.Text)
-
-			if len(msg.Photo) == 0 && msg.Video == nil && linkText == "" {
+			if len(msg.Photo) == 0 && msg.Video == nil {
 				sendSubMenu(botToken, chatID, lang, tr(lang, "need_real_media_story"))
 			} else {
-				var (
-					mediaType string
-					fileID    string
-					duration  int
-					err       error
-				)
-
-				switch {
-				case msg.Video != nil:
-					mediaType, fileID, duration = "video", msg.Video.FileID, msg.Video.Duration
-				case len(msg.Photo) > 0:
-					mediaType, fileID = "photo", msg.Photo[len(msg.Photo)-1].FileID
-				default:
-					// لم يُرسل ميديا مباشرة، تحقق مما إذا كان النص رابط منشور من قناة
-					chatRef, messageID, ok := parseChannelMessageLink(linkText)
-					if !ok {
-						err = fmt.Errorf(tr(lang, "invalid_link_msg"))
-						break
-					}
-					mediaType, fileID, duration, err = fetchMediaFromChannelLink(botToken, chatID, chatRef, messageID)
-					if err == nil && fileID == "" {
-						err = fmt.Errorf(tr(lang, "link_no_media"))
-					}
+				var err error
+				if msg.Video != nil {
+					err = postBusinessStory(botToken, config.BusinessConnID, "video", msg.Video.FileID, msg.Video.Duration, period, lang)
+				} else {
+					fileID := msg.Photo[len(msg.Photo)-1].FileID
+					err = postBusinessStory(botToken, config.BusinessConnID, "photo", fileID, 0, period, lang)
 				}
-
-				if err == nil {
-					err = postBusinessStory(botToken, config.BusinessConnID, mediaType, fileID, duration, period, lang)
-				}
-
 				if err != nil {
 					sendSubMenu(botToken, chatID, lang, fmt.Sprintf(tr(lang, "fail_story"), err.Error()))
 				} else {
@@ -800,7 +759,7 @@ func getAdminIDFromBusinessConn(token string, connID string) int64 {
 	if connID == "" {
 		return 0
 	}
-
+	
 	bizCacheMu.Lock()
 	if id, ok := bizCache[connID]; ok {
 		bizCacheMu.Unlock()
@@ -821,7 +780,7 @@ func getAdminIDFromBusinessConn(token string, connID string) int64 {
 		log.Println("خطأ فك تشفير getBusinessConnection:", err)
 		return 0
 	}
-
+	
 	var adminID int64
 	if res.Result.UserChatID != 0 {
 		adminID = res.Result.UserChatID
@@ -1437,120 +1396,6 @@ func postBusinessStory(token, businessConnID, mediaType, fileID string, duration
 		"active_period":          activePeriod,
 	}
 	return postMultipartBusinessAPI(token, "postStory", fields, "content", fileName, data)
-}
-
-// parseChannelMessageLink يحلّل رابط منشور تيليجرام ويستخرج منه معرّف
-// المحادثة (chat_id) ورقم الرسالة (message_id). يدعم كلا الصيغتين:
-//   - القنوات العامة:  https://t.me/channelusername/123
-//   - القنوات الخاصة:  https://t.me/c/1234567890/123
-func parseChannelMessageLink(link string) (chatRef string, messageID int, ok bool) {
-	link = strings.TrimSpace(link)
-	if link == "" {
-		return "", 0, false
-	}
-
-	// إزالة أي معاملات إضافية بعد علامة الاستفهام (مثل ?single)
-	if idx := strings.Index(link, "?"); idx != -1 {
-		link = link[:idx]
-	}
-
-	link = strings.TrimPrefix(link, "https://")
-	link = strings.TrimPrefix(link, "http://")
-	link = strings.TrimPrefix(link, "www.")
-
-	switch {
-	case strings.HasPrefix(link, "t.me/"):
-		link = strings.TrimPrefix(link, "t.me/")
-	case strings.HasPrefix(link, "telegram.me/"):
-		link = strings.TrimPrefix(link, "telegram.me/")
-	default:
-		return "", 0, false
-	}
-
-	link = strings.TrimSuffix(link, "/")
-	parts := strings.Split(link, "/")
-	if len(parts) < 2 {
-		return "", 0, false
-	}
-
-	if parts[0] == "c" {
-		// رابط قناة خاصة: t.me/c/<internal_id>/<message_id>
-		if len(parts) < 3 {
-			return "", 0, false
-		}
-		internalID := parts[1]
-		if internalID == "" {
-			return "", 0, false
-		}
-		msgID, err := strconv.Atoi(parts[2])
-		if err != nil || msgID <= 0 {
-			return "", 0, false
-		}
-		return "-100" + internalID, msgID, true
-	}
-
-	// رابط قناة/مجموعة عامة: t.me/<username>/<message_id>
-	username := parts[0]
-	if username == "" {
-		return "", 0, false
-	}
-	msgID, err := strconv.Atoi(parts[1])
-	if err != nil || msgID <= 0 {
-		return "", 0, false
-	}
-	return "@" + username, msgID, true
-}
-
-// fetchMediaFromChannelLink يجلب المنشور من القناة عبر forwardMessage (يتطلب
-// أن يكون البوت عضواً/مشرفاً في القناة)، يستخرج منه الصورة أو الفيديو، ثم
-// يحذف النسخة المُعاد توجيهها من محادثة الأدمن حتى لا تبقى ظاهرة له.
-func fetchMediaFromChannelLink(token string, adminID int64, chatRef string, messageID int) (mediaType, fileID string, duration int, err error) {
-	if adminID == 0 {
-		return "", "", 0, fmt.Errorf(tr("ar", "link_fetch_failed"))
-	}
-
-	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/forwardMessage", token)
-	payload := map[string]interface{}{
-		"chat_id":               adminID,
-		"from_chat_id":          chatRef,
-		"message_id":            messageID,
-		"disable_notification":  true,
-	}
-	b, _ := json.Marshal(payload)
-
-	resp, reqErr := httpClient.Post(apiURL, "application/json", bytes.NewBuffer(b))
-	if reqErr != nil {
-		log.Println("خطأ forwardMessage:", reqErr)
-		return "", "", 0, fmt.Errorf("تعذر الاتصال بتليجرام لجلب المنشور")
-	}
-	defer resp.Body.Close()
-
-	var res ForwardedMessageResponse
-	if decErr := json.NewDecoder(resp.Body).Decode(&res); decErr != nil {
-		log.Println("خطأ فك تشفير forwardMessage:", decErr)
-		return "", "", 0, fmt.Errorf("رد غير متوقع عند جلب المنشور")
-	}
-
-	if !res.Ok {
-		log.Println("فشل forwardMessage:", res.Description)
-		return "", "", 0, fmt.Errorf(res.Description)
-	}
-
-	// حذف النسخة المُعاد توجيهها فور استخراج بيانات الميديا منها
-	if res.Result.MessageID != 0 {
-		defer deleteMessage(token, adminID, res.Result.MessageID)
-	}
-
-	if res.Result.Video != nil {
-		return "video", res.Result.Video.FileID, res.Result.Video.Duration, nil
-	}
-
-	if len(res.Result.Photo) > 0 {
-		largest := res.Result.Photo[len(res.Result.Photo)-1]
-		return "photo", largest.FileID, 0, nil
-	}
-
-	return "", "", 0, nil
 }
 
 func deleteMessage(token string, chatID int64, msgID int) {
