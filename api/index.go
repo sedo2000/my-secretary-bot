@@ -58,122 +58,180 @@ var translations = map[string]map[string]string{
 	"ar": {
 		"main_menu_title":        "القائمة الرئيسية 🤖:",
 		"welcome":                "أهلاً بك في لوحة تحكم البوت 🤖\nاختر من الأزرار أدناه للتحكم الكامل:",
-		"stop_btn":                "🛑 إيقاف الرد",
-		"start_btn":               "🟢 تشغيل الرد",
-		"edit_text_btn":           "📝 تعديل نص الرد",
-		"exclude_btn":             "👤 استثناء حساب",
-		"list_excluded_btn":       "📋 عرض المستثنين",
-		"clear_excluded_btn":      "🧹 مسح المستثنين",
-		"profile_menu_btn":        "🧑 إدارة الملف الشخصي",
-		"post_story_btn":          "📖 نشر قصة",
-		"lang_ar_btn":             "🇮🇶 العربية",
-		"lang_en_btn":             "🇺🇸 English",
-		"back_btn":                "🔙 رجوع",
-		"stopped_msg":             "🛑 تم إيقاف الرد التلقائي بنجاح.",
-		"started_msg":             "🟢 تم تشغيل الرد التلقائي بنجاح.",
-		"edit_text_prompt":        "📝 أرسل الآن نص الرد التلقائي الجديد:",
-		"saved_text_msg":          "✅ تم حفظ نص الرد التلقائي الجديد بنجاح!",
-		"exclude_prompt":          "👤 أرسل ايدي الحساب المراد استثناؤه الآن:",
-		"invalid_id_msg":          "❌ أرقام فقط! أرسل الايدي بشكل صحيح.",
-		"id_added_msg":            "✅ تم إضافة الايدي `%d` إلى قائمة الاستثناء.",
-		"list_excluded_title":     "📋 **قائمة الحسابات المستثناة:**\n",
-		"no_excluded":             "لا يوجد حسابات مستثناة حالياً.",
-		"cleared_excluded_msg":    "🧹 تم مسح جميع الاستثناءات بنجاح.",
-		"profile_menu_title":      "🧑 إدارة الملف الشخصي - اختر ما تريد تعديله:",
-		"edit_first_name_btn":     "✏️ تعديل الاسم",
-		"edit_bio_btn":            "📝 تعديل النبذة",
-		"edit_photo_btn":          "🖼️ تعديل الصورة",
-		"edit_username_btn":       "🔗 تعديل اليوزر",
-		"no_business_connection":  "❌ لم يتم ربط حساب تجاري بعد بالبوت.",
-		"first_name_prompt":       "✏️ أرسل الآن الاسم الأول الجديد (والاسم الأخير بعده بمسافة، اختياري):",
-		"bio_prompt":              "📝 أرسل الآن النبذة الجديدة (حد أقصى 70 حرف):",
-		"username_prompt":         "🔗 أرسل الآن اسم المستخدم الجديد (بدون @):",
-		"photo_prompt":            "🖼️ أرسل الآن الصورة الجديدة لملفك الشخصي:",
-		"name_updated":            "✅ تم تعديل الاسم بنجاح!",
-		"bio_updated":             "✅ تم تعديل النبذة بنجاح!",
-		"username_updated":        "✅ تم تعديل اسم المستخدم بنجاح!",
-		"photo_updated":           "✅ تم تعديل صورة الملف الشخصي بنجاح!",
-		"select_story_duration":   "⏱️ اختر مدة ظهور القصة المطلوبة:",
-		"dur_6h":                  "6 ساعات",
-		"dur_12h":                 "12 ساعة",
-		"dur_24h":                 "24 ساعة",
-		"dur_48h":                 "48 ساعة",
-		"story_prompt":            "📖 أرسل الآن صورة أو فيديو (حد أقصى 60 ثانية) لنشره كقصة (ستبقى ظاهرة لمدة %s):",
-		"story_updated":           "✅ تم نشر القصة بنجاح! ستبقى ظاهرة لمدة %s.",
-		"your_id_msg":             "الايدي الخاص بك هو:\n`%d`",
-		"fail_name":               "❌ فشل تعديل الاسم: %s",
-		"fail_bio":                "❌ فشل تعديل النبذة: %s",
-		"fail_username":           "❌ فشل تعديل اليوزر: %s",
-		"fail_photo":              "❌ فشل تعديل الصورة: %s",
-		"fail_story":              "❌ فشل نشر القصة: %s",
-		"need_real_photo":         "❌ أرسل صورة فعلية (لا يقبل ملفات أو نصوص).",
-		"need_real_media_story":   "❌ أرسل صورة أو فيديو فعلي لنشره كقصة.",
-		"video_too_long_error":    "الفيديو أطول من 60 ثانية، وهذا الحد الأقصى المسموح لقصص تليجرام",
-		"id_copy_btn":             "🆔 نسخ الآيدي",
-		"share_user_btn":          "👤 User",
-		"share_user_prompt":       "👇 استخدم هذا الزر لمشاركة أي مستخدم من قائمة محادثاتك مع البوت، وسيتم استخراج اسمه ويوزره وآيديه تلقائياً:",
-		"user_shared_info":        "👤 *معلومات المستخدم المُشارك:*\n\nالاسم: %s\nاليوزر: %s\nالآيدي: `%d`",
-		"no_username":             "لا يوجد يوزر",
+		"stop_btn":               "🛑 إيقاف الرد",
+		"start_btn":              "🟢 تشغيل الرد",
+		"edit_text_btn":          "📝 تعديل نص الرد",
+		"media_reply_btn":        "🎬 الرد التلقائي بالوسائط",
+		"exclude_btn":            "👤 استثناء حساب",
+		"list_excluded_btn":      "📋 عرض المستثنين",
+		"clear_excluded_btn":     "🧹 مسح المستثنين",
+		"profile_menu_btn":       "🧑 إدارة الملف الشخصي",
+		"post_story_btn":         "📖 نشر قصة",
+		"lang_ar_btn":            "🇮🇶 العربية",
+		"lang_en_btn":            "🇺🇸 English",
+		"back_btn":               "🔙 رجوع",
+		"stopped_msg":            "🛑 تم إيقاف الرد التلقائي بنجاح.",
+		"started_msg":            "🟢 تم تشغيل الرد التلقائي بنجاح.",
+		"edit_text_prompt":       "📝 أرسل الآن نص الرد التلقائي الجديد:",
+		"saved_text_msg":         "✅ تم حفظ نص الرد التلقائي الجديد بنجاح!",
+		"exclude_prompt":         "👤 أرسل ايدي الحساب المراد استثناؤه الآن:",
+		"invalid_id_msg":         "❌ أرقام فقط! أرسل الايدي بشكل صحيح.",
+		"id_added_msg":           "✅ تم إضافة الايدي `%d` إلى قائمة الاستثناء.",
+		"list_excluded_title":    "📋 **قائمة الحسابات المستثناة:**\n",
+		"no_excluded":            "لا يوجد حسابات مستثناة حالياً.",
+		"cleared_excluded_msg":   "🧹 تم مسح جميع الاستثناءات بنجاح.",
+		"profile_menu_title":     "🧑 إدارة الملف الشخصي - اختر ما تريد تعديله:",
+		"edit_first_name_btn":    "✏️ تعديل الاسم",
+		"edit_bio_btn":           "📝 تعديل النبذة",
+		"edit_photo_btn":         "🖼️ تعديل الصورة",
+		"edit_username_btn":      "🔗 تعديل اليوزر",
+		"no_business_connection": "❌ لم يتم ربط حساب تجاري بعد بالبوت.",
+		"first_name_prompt":      "✏️ أرسل الآن الاسم الأول الجديد (والاسم الأخير بعده بمسافة، اختياري):",
+		"bio_prompt":             "📝 أرسل الآن النبذة الجديدة (حد أقصى 70 حرف):",
+		"username_prompt":        "🔗 أرسل الآن اسم المستخدم الجديد (بدون @):",
+		"photo_prompt":           "🖼️ أرسل الآن الصورة الجديدة لملفك الشخصي:",
+		"name_updated":           "✅ تم تعديل الاسم بنجاح!",
+		"bio_updated":            "✅ تم تعديل النبذة بنجاح!",
+		"username_updated":       "✅ تم تعديل اسم المستخدم بنجاح!",
+		"photo_updated":          "✅ تم تعديل صورة الملف الشخصي بنجاح!",
+		"select_story_duration":  "⏱️ اختر مدة ظهور القصة المطلوبة:",
+		"dur_6h":                 "6 ساعات",
+		"dur_12h":                "12 ساعة",
+		"dur_24h":                "24 ساعة",
+		"dur_48h":                "48 ساعة",
+		"story_prompt":           "📖 أرسل الآن صورة أو فيديو (حد أقصى 60 ثانية) لنشره كقصة (ستبقى ظاهرة لمدة %s):",
+		"story_updated":          "✅ تم نشر القصة بنجاح! ستبقى ظاهرة لمدة %s.",
+		"your_id_msg":            "الايدي الخاص بك هو:\n`%d`",
+		"fail_name":              "❌ فشل تعديل الاسم: %s",
+		"fail_bio":               "❌ فشل تعديل النبذة: %s",
+		"fail_username":          "❌ فشل تعديل اليوزر: %s",
+		"fail_photo":             "❌ فشل تعديل الصورة: %s",
+		"fail_story":             "❌ فشل نشر القصة: %s",
+		"need_real_photo":        "❌ أرسل صورة فعلية (لا يقبل ملفات أو نصوص).",
+		"need_real_media_story":  "❌ أرسل صورة أو فيديو فعلي لنشره كقصة.",
+		"video_too_long_error":   "الفيديو أطول من 60 ثانية، وهذا الحد الأقصى المسموح لقصص تليجرام",
+		"id_copy_btn":            "🆔 نسخ الآيدي",
+		"share_user_btn":         "👤 User",
+		"share_user_prompt":      "👇 استخدم هذا الزر لمشاركة أي مستخدم من قائمة محادثاتك مع البوت، وسيتم استخراج اسمه ويوزره وآيديه تلقائياً:",
+		"user_shared_info":       "👤 *معلومات المستخدم المُشارك:*\n\nالاسم: %s\nاليوزر: %s\nالآيدي: `%d`",
+		"no_username":            "لا يوجد يوزر",
+
+		// 🆕 نصوص الوسائط
+		"media_menu_title":       "🎬 اختر نوع الوسائط للرد التلقائي:",
+		"media_text_btn":         "📝 نص فقط",
+		"media_voice_btn":        "🎤 رسالة صوتية",
+		"media_audio_btn":        "🎵 ملف صوتي",
+		"media_gif_btn":          "🎞️ GIF متحرك",
+		"media_sticker_btn":      "😀 ملصق",
+		"media_video_btn":        "🎥 فيديو",
+		"media_photo_btn":        "🖼️ صورة",
+		"media_preview_btn":      "👁️ معاينة الرد الحالي",
+		"media_clear_btn":        "🗑️ حذف الوسائط والعودة للنص",
+		"media_upload_prompt":    "📤 أرسل الآن %s التي تريد استخدامها كرد تلقائي:",
+		"media_saved_msg":        "✅ تم حفظ الرد التلقائي بنجاح!\nالنوع: *%s*",
+		"media_saved_with_caption": "✅ تم حفظ الرد التلقائي بنجاح!\nالنوع: *%s*\nالنص المصاحب: %s",
+		"media_cleared_msg":      "🗑️ تم حذف الوسائط، الرد التلقائي الآن نصي فقط.",
+		"current_media_info":     "📌 *الرد التلقائي الحالي:*\n\nالنوع: *%s*\nالنص المصاحب: %s",
+		"no_media_set":           "⚠️ لا يوجد وسائط محددة حالياً، الرد نصي فقط.",
+		"need_media_error":       "❌ يجب إرسال %s فعلي!",
+		"media_type_voice":       "رسالة صوتية",
+		"media_type_audio":       "ملف صوتي",
+		"media_type_gif":         "GIF متحرك",
+		"media_type_sticker":     "ملصق",
+		"media_type_video":       "فيديو",
+		"media_type_photo":       "صورة",
+		"media_type_text":        "نص فقط",
+		"preview_media_caption":  "🔍 هذه معاينة للوسائط المحفوظة:",
+		"no_caption":             "بدون نص مصاحب",
 	},
 	"en": {
 		"main_menu_title":        "Main Menu 🤖:",
 		"welcome":                "Welcome to the bot control panel 🤖\nChoose from the buttons below for full control:",
-		"stop_btn":                "🛑 Stop Auto-Reply",
-		"start_btn":               "🟢 Start Auto-Reply",
-		"edit_text_btn":           "📝 Edit Reply Text",
-		"exclude_btn":             "👤 Exclude Account",
-		"list_excluded_btn":       "📋 View Excluded",
-		"clear_excluded_btn":      "🧹 Clear Excluded",
-		"profile_menu_btn":        "🧑 Manage Profile",
-		"post_story_btn":          "📖 Post Story",
-		"lang_ar_btn":             "🇮🇶 العربية",
-		"lang_en_btn":             "🇺🇸 English",
-		"back_btn":                "🔙 Back",
-		"stopped_msg":             "🛑 Auto-reply has been stopped.",
-		"started_msg":             "🟢 Auto-reply has been started.",
-		"edit_text_prompt":        "📝 Send the new auto-reply text now:",
-		"saved_text_msg":          "✅ New auto-reply text saved successfully!",
-		"exclude_prompt":          "👤 Send the account ID to exclude now:",
-		"invalid_id_msg":          "❌ Numbers only! Please send a valid ID.",
-		"id_added_msg":            "✅ ID `%d` added to the exclusion list.",
-		"list_excluded_title":     "📋 **Excluded Accounts:**\n",
-		"no_excluded":             "No excluded accounts currently.",
-		"cleared_excluded_msg":    "🧹 All exclusions cleared successfully.",
-		"profile_menu_title":      "🧑 Manage Profile - choose what to edit:",
-		"edit_first_name_btn":     "✏️ Edit Name",
-		"edit_bio_btn":            "📝 Edit Bio",
-		"edit_photo_btn":          "🖼️ Edit Photo",
-		"edit_username_btn":       "🔗 Edit Username",
-		"no_business_connection":  "❌ No business account connected to the bot yet.",
-		"first_name_prompt":       "✏️ Send the new first name now (optionally followed by a last name):",
-		"bio_prompt":              "📝 Send the new bio now (max 70 characters):",
-		"username_prompt":         "🔗 Send the new username now (without @):",
-		"photo_prompt":            "🖼️ Send the new profile photo now:",
-		"name_updated":            "✅ Name updated successfully!",
-		"bio_updated":             "✅ Bio updated successfully!",
-		"username_updated":        "✅ Username updated successfully!",
-		"photo_updated":           "✅ Profile photo updated successfully!",
-		"select_story_duration":   "⏱️ Select story duration:",
-		"dur_6h":                  "6 Hours",
-		"dur_12h":                 "12 Hours",
-		"dur_24h":                 "24 Hours",
-		"dur_48h":                 "48 Hours",
-		"story_prompt":            "📖 Send a photo or video now (max 60 seconds) to post as a story (visible for %s):",
-		"story_updated":           "✅ Story posted successfully! It will remain visible for %s.",
-		"your_id_msg":             "Your ID is:\n`%d`",
-		"fail_name":               "❌ Failed to update name: %s",
-		"fail_bio":                "❌ Failed to update bio: %s",
-		"fail_username":           "❌ Failed to update username: %s",
-		"fail_photo":              "❌ Failed to update photo: %s",
-		"fail_story":              "❌ Failed to post story: %s",
-		"need_real_photo":         "❌ Please send an actual photo (files or text not accepted).",
-		"need_real_media_story":   "❌ Please send an actual photo or video to post as a story.",
-		"video_too_long_error":    "The video is longer than 60 seconds, which is Telegram's maximum allowed for stories",
-		"id_copy_btn":             "🆔 Copy ID",
-		"share_user_btn":          "👤 User",
-		"share_user_prompt":       "👇 Use this button to share any user from your chat list with the bot — their name, username and ID will be extracted automatically:",
-		"user_shared_info":        "👤 *Shared User Info:*\n\nName: %s\nUsername: %s\nID: `%d`",
-		"no_username":             "No username",
+		"stop_btn":               "🛑 Stop Auto-Reply",
+		"start_btn":              "🟢 Start Auto-Reply",
+		"edit_text_btn":          "📝 Edit Reply Text",
+		"media_reply_btn":        "🎬 Media Auto-Reply",
+		"exclude_btn":            "👤 Exclude Account",
+		"list_excluded_btn":      "📋 View Excluded",
+		"clear_excluded_btn":     "🧹 Clear Excluded",
+		"profile_menu_btn":       "🧑 Manage Profile",
+		"post_story_btn":         "📖 Post Story",
+		"lang_ar_btn":            "🇮🇶 العربية",
+		"lang_en_btn":            "🇺🇸 English",
+		"back_btn":               "🔙 Back",
+		"stopped_msg":            "🛑 Auto-reply has been stopped.",
+		"started_msg":            "🟢 Auto-reply has been started.",
+		"edit_text_prompt":       "📝 Send the new auto-reply text now:",
+		"saved_text_msg":         "✅ New auto-reply text saved successfully!",
+		"exclude_prompt":         "👤 Send the account ID to exclude now:",
+		"invalid_id_msg":         "❌ Numbers only! Please send a valid ID.",
+		"id_added_msg":           "✅ ID `%d` added to the exclusion list.",
+		"list_excluded_title":    "📋 **Excluded Accounts:**\n",
+		"no_excluded":            "No excluded accounts currently.",
+		"cleared_excluded_msg":   "🧹 All exclusions cleared successfully.",
+		"profile_menu_title":     "🧑 Manage Profile - choose what to edit:",
+		"edit_first_name_btn":    "✏️ Edit Name",
+		"edit_bio_btn":           "📝 Edit Bio",
+		"edit_photo_btn":         "🖼️ Edit Photo",
+		"edit_username_btn":      "🔗 Edit Username",
+		"no_business_connection": "❌ No business account connected to the bot yet.",
+		"first_name_prompt":      "✏️ Send the new first name now (optionally followed by a last name):",
+		"bio_prompt":             "📝 Send the new bio now (max 70 characters):",
+		"username_prompt":        "🔗 Send the new username now (without @):",
+		"photo_prompt":           "🖼️ Send the new profile photo now:",
+		"name_updated":           "✅ Name updated successfully!",
+		"bio_updated":            "✅ Bio updated successfully!",
+		"username_updated":       "✅ Username updated successfully!",
+		"photo_updated":          "✅ Profile photo updated successfully!",
+		"select_story_duration":  "⏱️ Select story duration:",
+		"dur_6h":                 "6 Hours",
+		"dur_12h":                "12 Hours",
+		"dur_24h":                "24 Hours",
+		"dur_48h":                "48 Hours",
+		"story_prompt":           "📖 Send a photo or video now (max 60 seconds) to post as a story (visible for %s):",
+		"story_updated":          "✅ Story posted successfully! It will remain visible for %s.",
+		"your_id_msg":            "Your ID is:\n`%d`",
+		"fail_name":              "❌ Failed to update name: %s",
+		"fail_bio":               "❌ Failed to update bio: %s",
+		"fail_username":          "❌ Failed to update username: %s",
+		"fail_photo":             "❌ Failed to update photo: %s",
+		"fail_story":             "❌ Failed to post story: %s",
+		"need_real_photo":        "❌ Please send an actual photo (files or text not accepted).",
+		"need_real_media_story":  "❌ Please send an actual photo or video to post as a story.",
+		"video_too_long_error":   "The video is longer than 60 seconds, which is Telegram's maximum allowed for stories",
+		"id_copy_btn":            "🆔 Copy ID",
+		"share_user_btn":         "👤 User",
+		"share_user_prompt":      "👇 Use this button to share any user from your chat list with the bot — their name, username and ID will be extracted automatically:",
+		"user_shared_info":       "👤 *Shared User Info:*\n\nName: %s\nUsername: %s\nID: `%d`",
+		"no_username":            "No username",
+
+		// 🆕 Media texts
+		"media_menu_title":       "🎬 Choose media type for auto-reply:",
+		"media_text_btn":         "📝 Text Only",
+		"media_voice_btn":        "🎤 Voice Message",
+		"media_audio_btn":        "🎵 Audio File",
+		"media_gif_btn":          "🎞️ GIF Animation",
+		"media_sticker_btn":      "😀 Sticker",
+		"media_video_btn":        "🎥 Video",
+		"media_photo_btn":        "🖼️ Photo",
+		"media_preview_btn":      "👁️ Preview Current Reply",
+		"media_clear_btn":        "🗑️ Clear Media & Back to Text",
+		"media_upload_prompt":    "📤 Send the %s you want to use as auto-reply now:",
+		"media_saved_msg":        "✅ Auto-reply saved successfully!\nType: *%s*",
+		"media_saved_with_caption": "✅ Auto-reply saved successfully!\nType: *%s*\nCaption: %s",
+		"media_cleared_msg":      "🗑️ Media cleared, auto-reply is now text only.",
+		"current_media_info":     "📌 *Current Auto-Reply:*\n\nType: *%s*\nCaption: %s",
+		"no_media_set":           "⚠️ No media set currently, reply is text only.",
+		"need_media_error":       "❌ You must send an actual %s!",
+		"media_type_voice":       "Voice Message",
+		"media_type_audio":       "Audio File",
+		"media_type_gif":         "GIF Animation",
+		"media_type_sticker":     "Sticker",
+		"media_type_video":       "Video",
+		"media_type_photo":       "Photo",
+		"media_type_text":        "Text Only",
+		"preview_media_caption":  "🔍 This is a preview of the saved media:",
+		"no_caption":             "No caption",
 	},
 }
 
@@ -185,6 +243,26 @@ func tr(lang, key string) string {
 		return val
 	}
 	return key
+}
+
+// دالة الحصول على اسم نوع الوسائط المترجم
+func mediaTypeName(lang, mediaType string) string {
+	switch mediaType {
+	case "voice":
+		return tr(lang, "media_type_voice")
+	case "audio":
+		return tr(lang, "media_type_audio")
+	case "gif":
+		return tr(lang, "media_type_gif")
+	case "sticker":
+		return tr(lang, "media_type_sticker")
+	case "video":
+		return tr(lang, "media_type_video")
+	case "photo":
+		return tr(lang, "media_type_photo")
+	default:
+		return tr(lang, "media_type_text")
+	}
 }
 
 func getDurationLabel(lang, period string) string {
@@ -251,6 +329,9 @@ func translateText(text, targetLang string) (string, string, error) {
 type BotConfig struct {
 	IsStopped      bool    `json:"is_stopped"`
 	AutoReply      string  `json:"auto_reply"`
+	ReplyType      string  `json:"reply_type"`    // "text" | "voice" | "audio" | "gif" | "sticker" | "video" | "photo"
+	ReplyFileID    string  `json:"reply_file_id"` // file_id للوسائط
+	ReplyCaption   string  `json:"reply_caption"` // نص مصاحب للوسائط
 	Excluded       []int64 `json:"excluded"`
 	State          string  `json:"state"`
 	BusinessConnID string  `json:"business_conn_id"`
@@ -301,6 +382,37 @@ type Video struct {
 	Duration int    `json:"duration"`
 }
 
+// 🆕 هياكل الوسائط الجديدة
+type Voice struct {
+	FileID   string `json:"file_id"`
+	Duration int    `json:"duration"`
+}
+
+type Audio struct {
+	FileID   string `json:"file_id"`
+	Duration int    `json:"duration"`
+	Title    string `json:"title"`
+}
+
+type Animation struct {
+	FileID   string `json:"file_id"`
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
+	Duration int    `json:"duration"`
+}
+
+type Sticker struct {
+	FileID     string `json:"file_id"`
+	Emoji      string `json:"emoji"`
+	IsAnimated bool   `json:"is_animated"`
+}
+
+type Document struct {
+	FileID   string `json:"file_id"`
+	FileName string `json:"file_name"`
+	MimeType string `json:"mime_type"`
+}
+
 // معلومات مستخدم واحد تم مشاركته عبر زر request_users
 type SharedUserInfo struct {
 	UserID    int64  `json:"user_id"`
@@ -323,8 +435,14 @@ type Message struct {
 		ID int64 `json:"id"`
 	} `json:"from"`
 	Text        string           `json:"text"`
+	Caption     string           `json:"caption"` // 🆕
 	Photo       []PhotoSize      `json:"photo"`
 	Video       *Video           `json:"video"`
+	Voice       *Voice           `json:"voice"`     // 🆕
+	Audio       *Audio           `json:"audio"`     // 🆕
+	Animation   *Animation       `json:"animation"` // 🆕 GIF
+	Sticker     *Sticker         `json:"sticker"`   // 🆕
+	Document    *Document        `json:"document"`  // 🆕
 	UsersShared *UsersSharedData `json:"users_shared"`
 }
 
@@ -402,9 +520,59 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			saveConfig(botToken, adminID, config, msgID)
 			sendMenu(botToken, adminID, lang, tr(lang, "started_msg"))
 		case "edit_text":
+			// عند اختيار نص فقط، نصفّر الوسائط
+			config.ReplyType = "text"
+			config.ReplyFileID = ""
+			config.ReplyCaption = ""
 			config.State = "waiting_text"
 			saveConfig(botToken, adminID, config, msgID)
 			sendSubMenu(botToken, adminID, lang, tr(lang, "edit_text_prompt"))
+
+		// 🆕 فتح قائمة الوسائط
+		case "media_menu":
+			config.State = ""
+			saveConfig(botToken, adminID, config, msgID)
+			sendMediaMenu(botToken, adminID, lang)
+
+		case "media_text":
+			config.ReplyType = "text"
+			config.ReplyFileID = ""
+			config.ReplyCaption = ""
+			config.State = "waiting_text"
+			saveConfig(botToken, adminID, config, msgID)
+			sendSubMenu(botToken, adminID, lang, tr(lang, "edit_text_prompt"))
+
+		case "media_voice", "media_audio", "media_gif", "media_sticker", "media_video", "media_photo":
+			mediaType := strings.TrimPrefix(cb.Data, "media_")
+			config.State = "waiting_media_" + mediaType
+			saveConfig(botToken, adminID, config, msgID)
+			typeName := mediaTypeName(lang, mediaType)
+			sendSubMenu(botToken, adminID, lang, fmt.Sprintf(tr(lang, "media_upload_prompt"), typeName))
+
+		case "media_preview":
+			previewText := tr(lang, "no_media_set")
+			if config.ReplyType != "" && config.ReplyType != "text" && config.ReplyFileID != "" {
+				caption := config.ReplyCaption
+				if caption == "" {
+					caption = tr(lang, "no_caption")
+				}
+				previewText = fmt.Sprintf(tr(lang, "current_media_info"), mediaTypeName(lang, config.ReplyType), caption)
+				sendSubMenu(botToken, adminID, lang, previewText)
+				// إرسال معاينة فعلية للوسائط
+				sendPreviewMedia(botToken, adminID, config.ReplyType, config.ReplyFileID, config.ReplyCaption)
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			sendSubMenu(botToken, adminID, lang, previewText)
+
+		case "media_clear":
+			config.ReplyType = "text"
+			config.ReplyFileID = ""
+			config.ReplyCaption = ""
+			config.State = ""
+			saveConfig(botToken, adminID, config, msgID)
+			sendMenu(botToken, adminID, lang, tr(lang, "media_cleared_msg"))
+
 		case "exclude":
 			config.State = "waiting_id"
 			saveConfig(botToken, adminID, config, msgID)
@@ -531,8 +699,72 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// 🆕 معالجة رفع الوسائط بناءً على الحالة
+		if strings.HasPrefix(config.State, "waiting_media_") {
+			mediaType := strings.TrimPrefix(config.State, "waiting_media_")
+			var fileID string
+			var ok bool
+
+			switch mediaType {
+			case "voice":
+				if msg.Voice != nil {
+					fileID, ok = msg.Voice.FileID, true
+				}
+			case "audio":
+				if msg.Audio != nil {
+					fileID, ok = msg.Audio.FileID, true
+				}
+			case "gif":
+				if msg.Animation != nil {
+					fileID, ok = msg.Animation.FileID, true
+				} else if msg.Document != nil && msg.Document.MimeType == "video/mp4" {
+					fileID, ok = msg.Document.FileID, true
+				}
+			case "sticker":
+				if msg.Sticker != nil {
+					fileID, ok = msg.Sticker.FileID, true
+				}
+			case "video":
+				if msg.Video != nil {
+					fileID, ok = msg.Video.FileID, true
+				}
+			case "photo":
+				if len(msg.Photo) > 0 {
+					fileID, ok = msg.Photo[len(msg.Photo)-1].FileID, true
+				}
+			}
+
+			if !ok {
+				typeName := mediaTypeName(lang, mediaType)
+				sendSubMenu(botToken, chatID, lang, fmt.Sprintf(tr(lang, "need_media_error"), typeName))
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			config.ReplyType = mediaType
+			config.ReplyFileID = fileID
+			config.ReplyCaption = msg.Caption
+			config.State = ""
+			saveConfig(botToken, chatID, config, msgID)
+
+			typeName := mediaTypeName(lang, mediaType)
+			if msg.Caption != "" {
+				sendMenu(botToken, chatID, lang, fmt.Sprintf(tr(lang, "media_saved_with_caption"), typeName, msg.Caption))
+			} else {
+				sendMenu(botToken, chatID, lang, fmt.Sprintf(tr(lang, "media_saved_msg"), typeName))
+			}
+
+			// إرسال معاينة فورية
+			sendPreviewMedia(botToken, chatID, mediaType, fileID, msg.Caption)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
 		if config.State == "waiting_text" {
 			config.AutoReply = msg.Text
+			config.ReplyType = "text"
+			config.ReplyFileID = ""
+			config.ReplyCaption = ""
 			config.State = ""
 			saveConfig(botToken, chatID, config, msgID)
 			sendMenu(botToken, chatID, lang, tr(lang, "saved_text_msg"))
@@ -710,6 +942,30 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// 🎬 التحقق أولاً: هل الرد التلقائي من نوع وسائط؟
+		if config.ReplyType != "" && config.ReplyType != "text" && config.ReplyFileID != "" {
+			// استبدال متغيرات الاسم في الكابشن
+			caption := config.ReplyCaption
+			if caption != "" {
+				caption = strings.ReplaceAll(caption, "{name}", customerName)
+				caption = strings.ReplaceAll(caption, "{الاسم}", customerName)
+				caption = strings.ReplaceAll(caption, "$name", customerName)
+
+				// ترجمة الكابشن للغة العميل إن لزم
+				if detectedLang != "" && detectedLang != "ar" {
+					if translatedCaption, _, err := translateText(caption, detectedLang); err == nil && translatedCaption != "" {
+						caption = translatedCaption
+					}
+				}
+			}
+
+			if err := sendBusinessMediaReply(botToken, customerChatID, config.ReplyType, config.ReplyFileID, caption, msg.BusinessConnectionID); err != nil {
+				log.Println("خطأ إرسال وسائط الرد التلقائي:", err)
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
 		// --- معالجة نص الرد التلقائي ودعم ومتغيرات الأسماء ($name و {name} و {الاسم}) ---
 		var replyText string
 		if strings.TrimSpace(msg.Text) == "" {
@@ -759,7 +1015,7 @@ func getAdminIDFromBusinessConn(token string, connID string) int64 {
 	if connID == "" {
 		return 0
 	}
-	
+
 	bizCacheMu.Lock()
 	if id, ok := bizCache[connID]; ok {
 		bizCacheMu.Unlock()
@@ -780,7 +1036,7 @@ func getAdminIDFromBusinessConn(token string, connID string) int64 {
 		log.Println("خطأ فك تشفير getBusinessConnection:", err)
 		return 0
 	}
-	
+
 	var adminID int64
 	if res.Result.UserChatID != 0 {
 		adminID = res.Result.UserChatID
@@ -801,6 +1057,9 @@ func getConfig(token string, chatID int64) (BotConfig, int) {
 	defaultCfg := BotConfig{
 		IsStopped:      false,
 		AutoReply:      "",
+		ReplyType:      "text",
+		ReplyFileID:    "",
+		ReplyCaption:   "",
 		Excluded:       []int64{},
 		State:          "",
 		BusinessConnID: "",
@@ -838,6 +1097,9 @@ func getConfig(token string, chatID int64) (BotConfig, int) {
 		if err := json.Unmarshal([]byte(res.Result.PinnedMessage.Text), &cfg); err == nil {
 			if cfg.Lang == "" {
 				cfg.Lang = "ar"
+			}
+			if cfg.ReplyType == "" {
+				cfg.ReplyType = "text"
 			}
 			return cfg, res.Result.PinnedMessage.MessageID
 		}
@@ -901,7 +1163,7 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 	}
 }
 
-// إرسال معلومات البوت في الخاص (مع تلوين الزر "فعلني من هنا")
+// إرسال معلومات البوت في الخاص
 func sendNerdBotInfo(token string, chatID int64) {
 	text := "انا اسمي نيرد | Nerd من خلالي رح تقدر تنشر ستوريات غير محدودة بدون اشتراك مميز"
 	keyboard := map[string]interface{}{
@@ -927,7 +1189,7 @@ func sendNerdBotInfo(token string, chatID int64) {
 	}
 }
 
-// إرسال معلومات البوت عبر حساب الأعمال (Business Connection)
+// إرسال معلومات البوت عبر حساب الأعمال
 func sendNerdBotInfoBusiness(token string, chatID int64, bizID string) {
 	text := "انا اسمي نيرد | Nerd من خلالي رح تقدر تنشر ستوريات غير محدودة بدون اشتراك مميز"
 	keyboard := map[string]interface{}{
@@ -1006,6 +1268,10 @@ func sendMenu(token string, chatID int64, lang, text string) {
 			{
 				{"text": tr(lang, "edit_text_btn"), "callback_data": "edit_text", "style": "primary"},
 			},
+			// 🆕 زر الوسائط
+			{
+				{"text": tr(lang, "media_reply_btn"), "callback_data": "media_menu", "style": "success"},
+			},
 			{
 				{"text": tr(lang, "exclude_btn"), "callback_data": "exclude", "style": "primary"},
 				{"text": tr(lang, "list_excluded_btn"), "callback_data": "list_excluded", "style": "primary"},
@@ -1045,6 +1311,133 @@ func sendMenu(token string, chatID int64, lang, text string) {
 	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
 		log.Println("خطأ sendMenu:", err)
 	}
+}
+
+// 🆕 قائمة اختيار نوع الوسائط
+func sendMediaMenu(token string, chatID int64, lang string) {
+	keyboard := map[string]interface{}{
+		"inline_keyboard": [][]map[string]interface{}{
+			{
+				{"text": tr(lang, "media_text_btn"), "callback_data": "media_text", "style": "primary"},
+			},
+			{
+				{"text": tr(lang, "media_voice_btn"), "callback_data": "media_voice", "style": "primary"},
+				{"text": tr(lang, "media_audio_btn"), "callback_data": "media_audio", "style": "primary"},
+			},
+			{
+				{"text": tr(lang, "media_gif_btn"), "callback_data": "media_gif", "style": "primary"},
+				{"text": tr(lang, "media_sticker_btn"), "callback_data": "media_sticker", "style": "primary"},
+			},
+			{
+				{"text": tr(lang, "media_video_btn"), "callback_data": "media_video", "style": "primary"},
+				{"text": tr(lang, "media_photo_btn"), "callback_data": "media_photo", "style": "primary"},
+			},
+			{
+				{"text": tr(lang, "media_preview_btn"), "callback_data": "media_preview", "style": "success"},
+			},
+			{
+				{"text": tr(lang, "media_clear_btn"), "callback_data": "media_clear", "style": "danger"},
+			},
+			{
+				{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"},
+			},
+		},
+	}
+
+	payload := map[string]interface{}{
+		"chat_id":      chatID,
+		"text":         tr(lang, "media_menu_title"),
+		"parse_mode":   "Markdown",
+		"reply_markup": keyboard,
+	}
+	b, _ := json.Marshal(payload)
+	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
+		log.Println("خطأ sendMediaMenu:", err)
+	}
+}
+
+// 🆕 إرسال معاينة للوسائط المحفوظة
+func sendPreviewMedia(token string, chatID int64, mediaType, fileID, caption string) {
+	var method, field string
+	switch mediaType {
+	case "voice":
+		method, field = "sendVoice", "voice"
+	case "audio":
+		method, field = "sendAudio", "audio"
+	case "gif":
+		method, field = "sendAnimation", "animation"
+	case "sticker":
+		method, field = "sendSticker", "sticker"
+	case "video":
+		method, field = "sendVideo", "video"
+	case "photo":
+		method, field = "sendPhoto", "photo"
+	default:
+		return
+	}
+
+	payload := map[string]interface{}{
+		"chat_id": chatID,
+		field:     fileID,
+	}
+
+	if mediaType != "sticker" && caption != "" {
+		payload["caption"] = caption
+	}
+
+	b, _ := json.Marshal(payload)
+	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/"+method, "application/json", bytes.NewBuffer(b)); err != nil {
+		log.Println("خطأ sendPreviewMedia:", err)
+	}
+}
+
+// 🆕 إرسال الوسائط كرد تلقائي عبر Business API
+func sendBusinessMediaReply(token string, chatID int64, mediaType, fileID, caption, bizID string) error {
+	var method, field string
+	switch mediaType {
+	case "voice":
+		method, field = "sendVoice", "voice"
+	case "audio":
+		method, field = "sendAudio", "audio"
+	case "gif":
+		method, field = "sendAnimation", "animation"
+	case "sticker":
+		method, field = "sendSticker", "sticker"
+	case "video":
+		method, field = "sendVideo", "video"
+	case "photo":
+		method, field = "sendPhoto", "photo"
+	default:
+		return fmt.Errorf("نوع وسائط غير مدعوم: %s", mediaType)
+	}
+
+	payload := map[string]interface{}{
+		"chat_id":                chatID,
+		"business_connection_id": bizID,
+		field:                    fileID,
+	}
+
+	// الملصقات لا تدعم الكابشن
+	if mediaType != "sticker" && caption != "" {
+		payload["caption"] = caption
+		payload["parse_mode"] = "Markdown"
+	}
+
+	b, _ := json.Marshal(payload)
+	resp, err := mediaClient.Post("https://api.telegram.org/bot"+token+"/"+method, "application/json", bytes.NewBuffer(b))
+	if err != nil {
+		return fmt.Errorf("تعذر الاتصال بتليجرام: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var res apiResult
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return fmt.Errorf("رد غير متوقع من تليجرام")
+	}
+	if !res.Ok {
+		return fmt.Errorf(res.Description)
+	}
+	return nil
 }
 
 func sendStoryDurationMenu(token string, chatID int64, lang string) {
