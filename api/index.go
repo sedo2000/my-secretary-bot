@@ -31,7 +31,7 @@ var (
 	bizCacheMu sync.Mutex
 	bizCache   = make(map[string]int64)
 
-	// 🆕 تخزين قائمة الستوريات في الذاكرة (لتجاوز حد 4096 حرف)
+	// 🆕 تخزين قائمة الستوريات في الذاكرة
 	storyBatchMu sync.Mutex
 	storyBatch   = make(map[int64][]StoryItem)
 )
@@ -106,7 +106,7 @@ var translations = map[string]map[string]string{
 		"dur_24h":                  "24 ساعة",
 		"dur_48h":                  "48 ساعة",
 		"story_prompt":             "📖 أرسل الآن صورة أو فيديو (حد أقصى 60 ثانية) لنشره كقصة (ستبقى ظاهرة لمدة %s):",
-		"story_updated":            "✅ تم نشر القصة بنجاح على ملفك الشخصي! ستبقى ظاهرة لمدة %s.",
+		"story_updated":            "✅ تم نشر القصة بنجاح في الدائرة العلوية! ستبقى ظاهرة لمدة %s.",
 		"your_id_msg":              "الايدي الخاص بك هو:\n`%d`",
 		"fail_name":                "❌ فشل تعديل الاسم: %s",
 		"fail_bio":                 "❌ فشل تعديل النبذة: %s",
@@ -164,7 +164,7 @@ var translations = map[string]map[string]string{
 		"voice_msg_detected":       "🎤 أرسل العميل %s رسالة صوتية (%d ثانية)",
 
 		// نصوص الستوريات المتعددة
-		"batch_story_title":        "📚 إعداد قائمة الستوريات للنشر المتسلسل\n\nيمكنك إضافة حتى 100 ستوري وسيتم نشرها على ملفك الشخصي:",
+		"batch_story_title":        "📚 إعداد قائمة الستوريات للنشر المتسلسل\n\nيمكنك إضافة حتى 100 ستوري وسيتم نشرها جميعاً في الدائرة العلوية:",
 		"batch_story_add":          "➕ إضافة عنصر",
 		"batch_story_list":         "📋 عرض القائمة",
 		"batch_story_clear":        "🗑️ مسح القائمة",
@@ -172,13 +172,15 @@ var translations = map[string]map[string]string{
 		"batch_story_prompt":       "📤 أرسل الآن صورة أو فيديو لإضافته إلى القائمة:",
 		"batch_story_added":        "✅ تمت الإضافة! المجموع: %d عنصر",
 		"batch_story_empty":        "⚠️ القائمة فارغة، أضف عناصر أولاً.",
-		"batch_story_list_title":   "📋 *قائمة الستوريات (%d عنصر):*\n",
+		"batch_story_list_title":   "📋 *قائمة الستوريات (%d عنصر):*\n\nالمدة المحددة: *%s*\n\n",
 		"batch_story_item_line":    "%d. %s\n",
 		"batch_story_cleared":      "🗑️ تم مسح القائمة بالكامل.",
-		"batch_story_publishing":   "🚀 جاري النشر على ملفك الشخصي...\nسيتم إعلامك بالنتيجة.",
-		"batch_story_publish_done": "✅ تم نشر %d من %d ستوري بنجاح على ملفك الشخصي!",
+		"batch_story_publishing":   "🚀 جاري النشر في الدائرة العلوية...\nالمدة: *%s*\nالعدد: *%d*\n\nسيتم إعلامك بالنتيجة.",
+		"batch_story_publish_done": "✅ تم نشر %d من %d ستوري بنجاح في الدائرة العلوية!\n⏱️ المدة: %s",
 		"batch_story_publish_fail": "⚠️ فشل نشر %d عنصر من أصل %d.",
 		"batch_story_need_media":   "❌ أرسل صورة أو فيديو فعلي.",
+		"batch_story_choose_duration": "⏱️ اختر مدة ظهور الستوريات المتعددة:",
+		"batch_story_duration_set": "✅ تم تحديد المدة: *%s*\nالآن أضف العناصر (صور/فيديوهات).",
 	},
 	"en": {
 		"main_menu_title":          "Main Menu 🤖:",
@@ -227,7 +229,7 @@ var translations = map[string]map[string]string{
 		"dur_24h":                  "24 Hours",
 		"dur_48h":                  "48 Hours",
 		"story_prompt":             "📖 Send a photo or video now (max 60 seconds) to post as a story (visible for %s):",
-		"story_updated":            "✅ Story posted successfully on your profile! It will remain visible for %s.",
+		"story_updated":            "✅ Story posted successfully to the top circle! It will remain visible for %s.",
 		"your_id_msg":              "Your ID is:\n`%d`",
 		"fail_name":                "❌ Failed to update name: %s",
 		"fail_bio":                 "❌ Failed to update bio: %s",
@@ -282,7 +284,7 @@ var translations = map[string]map[string]string{
 		"reaction_detected":        "👍 Customer %s reacted with %s",
 		"voice_msg_detected":       "🎤 Customer %s sent a voice message (%d seconds)",
 
-		"batch_story_title":        "📚 Setup Batch Stories Queue\n\nYou can add up to 100 stories, they will be published to your profile:",
+		"batch_story_title":        "📚 Setup Batch Stories Queue\n\nYou can add up to 100 stories, all will be published to the top circle:",
 		"batch_story_add":          "➕ Add Item",
 		"batch_story_list":         "📋 View List",
 		"batch_story_clear":        "🗑️ Clear List",
@@ -290,13 +292,15 @@ var translations = map[string]map[string]string{
 		"batch_story_prompt":       "📤 Send a photo or video to add to the queue:",
 		"batch_story_added":        "✅ Added! Total: %d items",
 		"batch_story_empty":        "⚠️ Queue is empty, add items first.",
-		"batch_story_list_title":   "📋 *Stories Queue (%d items):*\n",
+		"batch_story_list_title":   "📋 *Stories Queue (%d items):*\n\nDuration: *%s*\n\n",
 		"batch_story_item_line":    "%d. %s\n",
 		"batch_story_cleared":      "🗑️ Queue cleared completely.",
-		"batch_story_publishing":   "🚀 Publishing to your profile...\nYou'll be notified.",
-		"batch_story_publish_done": "✅ Published %d of %d stories to your profile!",
+		"batch_story_publishing":   "🚀 Publishing to the top circle...\nDuration: *%s*\nCount: *%d*\n\nYou'll be notified.",
+		"batch_story_publish_done": "✅ Published %d of %d stories to the top circle!\n⏱️ Duration: %s",
 		"batch_story_publish_fail": "⚠️ Failed to publish %d of %d.",
 		"batch_story_need_media":   "❌ Send actual photo or video.",
+		"batch_story_choose_duration": "⏱️ Choose duration for the multiple stories:",
+		"batch_story_duration_set": "✅ Duration set: *%s*\nNow add items (photos/videos).",
 	},
 }
 
@@ -351,7 +355,6 @@ func toggleLabel(lang string, enabled bool) string {
 	return tr(lang, "interaction_off")
 }
 
-// دالة الترجمة الفورية
 func translateText(text, targetLang string) (string, string, error) {
 	if strings.TrimSpace(text) == "" {
 		return "", "", nil
@@ -417,20 +420,22 @@ type BotConfig struct {
 	StoryMentionReply   string `json:"story_mention_reply"`
 	ReactionReply       string `json:"reaction_reply"`
 	VoiceReply          string `json:"voice_reply"`
+
+	// 🆕 مدة الستوريات المختارة للقائمة المتعددة
+	BatchStoryDuration string `json:"batch_story_duration"` // "21600" | "43200" | "86400" | "172800"
 }
 
 // 🆕 عنصر ستوري
 type StoryItem struct {
-	FileID       string `json:"file_id"`
-	MediaType    string `json:"media_type"`
-	Duration     int    `json:"duration"`
-	Caption      string `json:"caption"`
-	ActivePeriod string `json:"active_period"`
+	FileID    string `json:"file_id"`
+	MediaType string `json:"media_type"`
+	Duration  int    `json:"duration"`
+	Caption   string `json:"caption"`
 }
 
 type TelegramUpdate struct {
-	Message            *Message       `json:"message"`
-	CallbackQuery      *CallbackQuery `json:"callback_query"`
+	Message            *Message         `json:"message"`
+	CallbackQuery      *CallbackQuery   `json:"callback_query"`
 	BusinessMessage    *BusinessMessage `json:"business_message"`
 	BusinessConnection *struct {
 		ID   string `json:"id"`
@@ -747,10 +752,30 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		case "batch_story_menu":
 			config.State = ""
 			saveConfig(botToken, adminID, config, msgID)
+			// 🆕 إذا لم يتم تحديد مدة، اطلبها أولاً
+			if config.BatchStoryDuration == "" {
+				config.BatchStoryDuration = "86400" // 24 ساعة افتراضياً
+				saveConfig(botToken, adminID, config, msgID)
+			}
 			storyBatchMu.Lock()
 			count := len(storyBatch[adminID])
 			storyBatchMu.Unlock()
-			sendBatchStoryMenu(botToken, adminID, lang, count)
+			sendBatchStoryMenu(botToken, adminID, lang, count, config.BatchStoryDuration)
+
+		// 🆕 تحديد مدة الستوريات المتعددة
+		case "batch_dur_21600", "batch_dur_43200", "batch_dur_86400", "batch_dur_172800":
+			period := strings.TrimPrefix(cb.Data, "batch_dur_")
+			config.BatchStoryDuration = period
+			config.State = ""
+			saveConfig(botToken, adminID, config, msgID)
+
+			storyBatchMu.Lock()
+			count := len(storyBatch[adminID])
+			storyBatchMu.Unlock()
+
+			durationTxt := getDurationLabel(lang, period)
+			sendMessage(botToken, adminID, fmt.Sprintf(tr(lang, "batch_story_duration_set"), durationTxt))
+			sendBatchStoryMenu(botToken, adminID, lang, count, period)
 
 		case "batch_add":
 			if config.BusinessConnID == "" {
@@ -767,18 +792,18 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			storyBatchMu.Unlock()
 
 			if len(items) == 0 {
-				sendBatchStoryMenu(botToken, adminID, lang, 0)
+				sendBatchStoryMenu(botToken, adminID, lang, 0, config.BatchStoryDuration)
 				sendMessage(botToken, adminID, tr(lang, "batch_story_empty"))
 				break
 			}
-			txt := fmt.Sprintf(tr(lang, "batch_story_list_title"), len(items))
+			durationTxt := getDurationLabel(lang, config.BatchStoryDuration)
+			txt := fmt.Sprintf(tr(lang, "batch_story_list_title"), len(items), durationTxt)
 			for i, item := range items {
 				mediaIcon := "🖼️"
 				if item.MediaType == "video" {
 					mediaIcon = "🎥"
 				}
-				dur := getDurationLabel(lang, item.ActivePeriod)
-				txt += fmt.Sprintf(tr(lang, "batch_story_item_line"), i+1, mediaIcon+" "+dur)
+				txt += fmt.Sprintf(tr(lang, "batch_story_item_line"), i+1, mediaIcon)
 			}
 			sendSubMenu(botToken, adminID, lang, txt)
 
@@ -788,8 +813,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			storyBatchMu.Unlock()
 			config.State = ""
 			saveConfig(botToken, adminID, config, msgID)
-			sendBatchStoryMenu(botToken, adminID, lang, 0)
+			sendBatchStoryMenu(botToken, adminID, lang, 0, config.BatchStoryDuration)
 
+		// 🆕 زر النشر - يستخدم المدة المختارة
 		case "batch_publish":
 			storyBatchMu.Lock()
 			items := storyBatch[adminID]
@@ -805,24 +831,37 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 
-			sendMessage(botToken, adminID, tr(lang, "batch_story_publishing"))
+			// استخدام المدة المختارة أو 24 ساعة افتراضياً
+			activePeriod := config.BatchStoryDuration
+			if activePeriod == "" {
+				activePeriod = "86400"
+			}
 
-			// نسخ للاستخدام في goroutine
+			durationTxt := getDurationLabel(lang, activePeriod)
+			sendMessage(botToken, adminID, fmt.Sprintf(
+				tr(lang, "batch_story_publishing"),
+				durationTxt,
+				len(items),
+			))
+
 			itemsCopy := make([]StoryItem, len(items))
 			copy(itemsCopy, items)
 			bizID := config.BusinessConnID
 			langCopy := lang
+			periodCopy := activePeriod
 
 			go func() {
-				success, fail := publishBatchStories(botToken, bizID, itemsCopy, langCopy)
+				success, fail := publishBatchStories(botToken, bizID, itemsCopy, periodCopy, langCopy)
 
-				resultMsg := fmt.Sprintf(tr(langCopy, "batch_story_publish_done"), success, len(itemsCopy))
+				resultMsg := fmt.Sprintf(
+					tr(langCopy, "batch_story_publish_done"),
+					success, len(itemsCopy), getDurationLabel(langCopy, periodCopy),
+				)
 				if fail > 0 {
 					resultMsg += "\n" + fmt.Sprintf(tr(langCopy, "batch_story_publish_fail"), fail, len(itemsCopy))
 				}
 				sendMessage(botToken, adminID, resultMsg)
 
-				// تفريغ القائمة
 				storyBatchMu.Lock()
 				storyBatch[adminID] = []StoryItem{}
 				storyBatchMu.Unlock()
@@ -1050,11 +1089,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			newItem := StoryItem{
-				FileID:       fileID,
-				MediaType:    mediaType,
-				Duration:     duration,
-				Caption:      msg.Caption,
-				ActivePeriod: "86400", // 24 ساعة افتراضياً
+				FileID:    fileID,
+				MediaType: mediaType,
+				Duration:  duration,
+				Caption:   msg.Caption,
 			}
 
 			storyBatchMu.Lock()
@@ -1069,7 +1107,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			saveConfig(botToken, chatID, config, msgID)
 
 			sendMessage(botToken, chatID, fmt.Sprintf(tr(lang, "batch_story_added"), count))
-			sendBatchStoryMenu(botToken, chatID, lang, count)
+			sendBatchStoryMenu(botToken, chatID, lang, count, config.BatchStoryDuration)
 
 		// ===== الحالات القديمة =====
 		} else if config.State == "waiting_text" {
@@ -1214,21 +1252,21 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			customerName = "صديقي"
 		}
 
-		// 🆕 معالجة الرد على الستوري (Story Mention)
+		// معالجة الرد على الستوري
 		if msg.Story != nil && config.ReplyToStoryMention {
 			handleStoryMention(botToken, adminID, config, customerChatID, senderID, customerName, msg)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		// 🆕 معالجة الريأكشن
+		// معالجة الريأكشن
 		if msg.Reaction != nil && config.ReplyToReaction {
 			handleReaction(botToken, adminID, config, customerChatID, senderID, customerName, msg)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		// 🆕 معالجة الرسالة الصوتية
+		// معالجة الرسالة الصوتية
 		if msg.Voice != nil && config.ReplyToVoice {
 			handleVoiceMessage(botToken, adminID, config, customerChatID, senderID, customerName, msg)
 			w.WriteHeader(http.StatusOK)
@@ -1270,7 +1308,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// الرد بالوسائط إذا كان مفعّلاً
+		// الرد بالوسائط
 		if config.ReplyType != "" && config.ReplyType != "text" && config.ReplyFileID != "" {
 			caption := config.ReplyCaption
 			if caption != "" {
@@ -1448,15 +1486,16 @@ func getAdminIDFromBusinessConn(token string, connID string) int64 {
 
 func getConfig(token string, chatID int64) (BotConfig, int) {
 	defaultCfg := BotConfig{
-		IsStopped:      false,
-		AutoReply:      "",
-		ReplyType:      "text",
-		ReplyFileID:    "",
-		ReplyCaption:   "",
-		Excluded:       []int64{},
-		State:          "",
-		BusinessConnID: "",
-		Lang:           "ar",
+		IsStopped:          false,
+		AutoReply:          "",
+		ReplyType:          "text",
+		ReplyFileID:        "",
+		ReplyCaption:       "",
+		Excluded:           []int64{},
+		State:              "",
+		BusinessConnID:     "",
+		Lang:               "ar",
+		BatchStoryDuration: "86400",
 	}
 
 	if chatID == 0 {
@@ -1493,6 +1532,9 @@ func getConfig(token string, chatID int64) (BotConfig, int) {
 			}
 			if cfg.ReplyType == "" {
 				cfg.ReplyType = "text"
+			}
+			if cfg.BatchStoryDuration == "" {
+				cfg.BatchStoryDuration = "86400"
 			}
 			return cfg, res.Result.PinnedMessage.MessageID
 		}
@@ -1714,9 +1756,23 @@ func sendInteractionMenu(token string, chatID int64, lang string, config BotConf
 	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
-func sendBatchStoryMenu(token string, chatID int64, lang string, count int) {
+// 🆕 قائمة الستوريات المتعددة - الآن مع اختيار المدة
+func sendBatchStoryMenu(token string, chatID int64, lang string, count int, duration string) {
+	durationTxt := getDurationLabel(lang, duration)
+	title := tr(lang, "batch_story_title") + "\n\n⏱️ *" + durationTxt + "*"
+
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
+			// 🆕 صف اختيار المدة
+			{
+				{"text": "⏱️ 6h", "callback_data": "batch_dur_21600", "style": "primary"},
+				{"text": "⏱️ 12h", "callback_data": "batch_dur_43200", "style": "primary"},
+			},
+			{
+				{"text": "⏱️ 24h", "callback_data": "batch_dur_86400", "style": "primary"},
+				{"text": "⏱️ 48h", "callback_data": "batch_dur_172800", "style": "primary"},
+			},
+			// 🆕 أزرار الإدارة
 			{{"text": tr(lang, "batch_story_add"), "callback_data": "batch_add", "style": "primary"}},
 			{{"text": fmt.Sprintf("%s (%d)", tr(lang, "batch_story_list"), count), "callback_data": "batch_list", "style": "primary"}},
 			{{"text": tr(lang, "batch_story_publish"), "callback_data": "batch_publish", "style": "success"}},
@@ -1726,7 +1782,7 @@ func sendBatchStoryMenu(token string, chatID int64, lang string, count int) {
 	}
 	payload := map[string]interface{}{
 		"chat_id":      chatID,
-		"text":         tr(lang, "batch_story_title"),
+		"text":         title,
 		"parse_mode":   "Markdown",
 		"reply_markup": keyboard,
 	}
@@ -2083,7 +2139,7 @@ func setBusinessAccountProfilePhoto(token, businessConnID, fileID string) error 
 	return postMultipartBusinessAPI(token, "setBusinessAccountProfilePhoto", fields, "photo", "photo.jpg", data)
 }
 
-// نشر قصة واحدة على الملف الشخصي (post_to_chat_page = true)
+// 🆕 نشر ستوري عادي في الدائرة العلوية - تم إزالة post_to_chat_page
 func postBusinessStory(token, businessConnID, mediaType, fileID string, durationSeconds int, activePeriod string, lang string) error {
 	if mediaType == "video" && durationSeconds > 60 {
 		return fmt.Errorf(tr(lang, "video_too_long_error"))
@@ -2111,37 +2167,55 @@ func postBusinessStory(token, businessConnID, mediaType, fileID string, duration
 		activePeriod = "86400"
 	}
 
+	// ✅ تم إزالة post_to_chat_page - النشر كستوري عادي في الدائرة العلوية
 	fields := map[string]string{
 		"business_connection_id": businessConnID,
 		"content":                contentJSON,
 		"active_period":          activePeriod,
-		"post_to_chat_page":      "true", // 🆕 النشر على الملف الشخصي
 	}
 	return postMultipartBusinessAPI(token, "postStory", fields, "content", fileName, data)
 }
 
-// نشر دفعة ستوريات متسلسلة
-func publishBatchStories(token, businessConnID string, items []StoryItem, lang string) (success, fail int) {
+// 🆕 نشر دفعة ستوريات متسلسلة - كلها في الدائرة العلوية
+func publishBatchStories(token, businessConnID string, items []StoryItem, activePeriod string, lang string) (success, fail int) {
+	total := len(items)
+	log.Printf("🚀 بدء نشر %d ستوري في الدائرة العلوية...", total)
+
 	for i, item := range items {
-		err := postBusinessStory(
-			token,
-			businessConnID,
-			item.MediaType,
-			item.FileID,
-			item.Duration,
-			item.ActivePeriod,
-			lang,
-		)
+		log.Printf("📤 جاري نشر الستوري %d/%d...", i+1, total)
+
+		// محاولة النشر مع إعادة 3 مرات
+		var err error
+		for attempt := 1; attempt <= 3; attempt++ {
+			err = postBusinessStory(
+				token, businessConnID,
+				item.MediaType, item.FileID,
+				item.Duration, activePeriod,
+				lang,
+			)
+			if err == nil {
+				break
+			}
+			log.Printf("⚠️ محاولة %d فشلت: %v", attempt, err)
+			time.Sleep(3 * time.Second)
+		}
+
 		if err != nil {
-			log.Printf("❌ فشل نشر الستوري %d: %v", i+1, err)
+			log.Printf("❌ فشل نشر الستوري %d/%d: %v", i+1, total, err)
 			fail++
 		} else {
-			log.Printf("✅ تم نشر الستوري %d بنجاح", i+1)
+			log.Printf("✅ تم نشر الستوري %d/%d بنجاح", i+1, total)
 			success++
 		}
-		// تأخير بين الستوريات لتجنب rate limit
-		time.Sleep(3 * time.Second)
+
+		// ⏱️ فاصل زمني بين كل ستوري (10 ثواني)
+		if i < total-1 {
+			log.Printf("⏱️ انتظار 10 ثواني قبل الستوري التالي...")
+			time.Sleep(10 * time.Second)
+		}
 	}
+
+	log.Printf("🎉 انتهى النشر: نجح %d، فشل %d", success, fail)
 	return
 }
 
