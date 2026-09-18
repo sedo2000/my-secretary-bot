@@ -21,18 +21,22 @@ import (
 var httpClient = &http.Client{Timeout: 8 * time.Second}
 
 // عميل بـ timeout أطول لعمليات تنزيل/رفع الصور والفيديوهات
-var mediaClient = &http.Client{Timeout: 30 * time.Second}
+var mediaClient = &http.Client{Timeout: 60 * time.Second}
 
-// متغيرات نظام التهدئة (Cooldown) والتخزين المؤقت لاتصال الأعمال
+// متغيرات نظام التهدئة (Cooldown) والتخزين المؤقت
 var (
 	cooldownMu    sync.Mutex
-	userCooldowns = make(map[int64]map[int64]time.Time) // map[adminID]map[senderID]expiryTime
+	userCooldowns = make(map[int64]map[int64]time.Time)
 
-	bizCacheMu    sync.Mutex
-	bizCache      = make(map[string]int64)
+	bizCacheMu sync.Mutex
+	bizCache   = make(map[string]int64)
+
+	// 🆕 تخزين قائمة الستوريات في الذاكرة (لتجاوز حد 4096 حرف)
+	storyBatchMu sync.Mutex
+	storyBatch   = make(map[int64][]StoryItem)
 )
 
-// صورة الترحيب التي تُرسل عند الضغط على /start
+// صورة الترحيب
 const startPhotoURL = "https://od.lk/s/M18zMzMwODEzNDNfV3R3TEM/IMG_20260810_235848_327.jpg"
 
 // قائمة الاقتباسات
@@ -53,185 +57,246 @@ var quotes = []string{
 	"لا مزيد من الأصدقاء المزيفين",
 }
 
-// --- قاموس الترجمة: عربي (افتراضي) وإنجليزي ---
+// --- قاموس الترجمة ---
 var translations = map[string]map[string]string{
 	"ar": {
-		"main_menu_title":        "القائمة الرئيسية 🤖:",
-		"welcome":                "أهلاً بك في لوحة تحكم البوت 🤖\nاختر من الأزرار أدناه للتحكم الكامل:",
-		"stop_btn":               "🛑 إيقاف الرد",
-		"start_btn":              "🟢 تشغيل الرد",
-		"edit_text_btn":          "📝 تعديل نص الرد",
-		"media_reply_btn":        "🎬 الرد التلقائي بالوسائط",
-		"exclude_btn":            "👤 استثناء حساب",
-		"list_excluded_btn":      "📋 عرض المستثنين",
-		"clear_excluded_btn":     "🧹 مسح المستثنين",
-		"profile_menu_btn":       "🧑 إدارة الملف الشخصي",
-		"post_story_btn":         "📖 نشر قصة",
-		"lang_ar_btn":            "🇮🇶 العربية",
-		"lang_en_btn":            "🇺🇸 English",
-		"back_btn":               "🔙 رجوع",
-		"stopped_msg":            "🛑 تم إيقاف الرد التلقائي بنجاح.",
-		"started_msg":            "🟢 تم تشغيل الرد التلقائي بنجاح.",
-		"edit_text_prompt":       "📝 أرسل الآن نص الرد التلقائي الجديد:",
-		"saved_text_msg":         "✅ تم حفظ نص الرد التلقائي الجديد بنجاح!",
-		"exclude_prompt":         "👤 أرسل ايدي الحساب المراد استثناؤه الآن:",
-		"invalid_id_msg":         "❌ أرقام فقط! أرسل الايدي بشكل صحيح.",
-		"id_added_msg":           "✅ تم إضافة الايدي `%d` إلى قائمة الاستثناء.",
-		"list_excluded_title":    "📋 **قائمة الحسابات المستثناة:**\n",
-		"no_excluded":            "لا يوجد حسابات مستثناة حالياً.",
-		"cleared_excluded_msg":   "🧹 تم مسح جميع الاستثناءات بنجاح.",
-		"profile_menu_title":     "🧑 إدارة الملف الشخصي - اختر ما تريد تعديله:",
-		"edit_first_name_btn":    "✏️ تعديل الاسم",
-		"edit_bio_btn":           "📝 تعديل النبذة",
-		"edit_photo_btn":         "🖼️ تعديل الصورة",
-		"edit_username_btn":      "🔗 تعديل اليوزر",
-		"no_business_connection": "❌ لم يتم ربط حساب تجاري بعد بالبوت.",
-		"first_name_prompt":      "✏️ أرسل الآن الاسم الأول الجديد (والاسم الأخير بعده بمسافة، اختياري):",
-		"bio_prompt":             "📝 أرسل الآن النبذة الجديدة (حد أقصى 70 حرف):",
-		"username_prompt":        "🔗 أرسل الآن اسم المستخدم الجديد (بدون @):",
-		"photo_prompt":           "🖼️ أرسل الآن الصورة الجديدة لملفك الشخصي:",
-		"name_updated":           "✅ تم تعديل الاسم بنجاح!",
-		"bio_updated":            "✅ تم تعديل النبذة بنجاح!",
-		"username_updated":       "✅ تم تعديل اسم المستخدم بنجاح!",
-		"photo_updated":          "✅ تم تعديل صورة الملف الشخصي بنجاح!",
-		"select_story_duration":  "⏱️ اختر مدة ظهور القصة المطلوبة:",
-		"dur_6h":                 "6 ساعات",
-		"dur_12h":                "12 ساعة",
-		"dur_24h":                "24 ساعة",
-		"dur_48h":                "48 ساعة",
-		"story_prompt":           "📖 أرسل الآن صورة أو فيديو (حد أقصى 60 ثانية) لنشره كقصة (ستبقى ظاهرة لمدة %s):",
-		"story_updated":          "✅ تم نشر القصة بنجاح! ستبقى ظاهرة لمدة %s.",
-		"your_id_msg":            "الايدي الخاص بك هو:\n`%d`",
-		"fail_name":              "❌ فشل تعديل الاسم: %s",
-		"fail_bio":               "❌ فشل تعديل النبذة: %s",
-		"fail_username":          "❌ فشل تعديل اليوزر: %s",
-		"fail_photo":             "❌ فشل تعديل الصورة: %s",
-		"fail_story":             "❌ فشل نشر القصة: %s",
-		"need_real_photo":        "❌ أرسل صورة فعلية (لا يقبل ملفات أو نصوص).",
-		"need_real_media_story":  "❌ أرسل صورة أو فيديو فعلي لنشره كقصة.",
-		"video_too_long_error":   "الفيديو أطول من 60 ثانية، وهذا الحد الأقصى المسموح لقصص تليجرام",
-		"id_copy_btn":            "🆔 نسخ الآيدي",
-		"share_user_btn":         "👤 User",
-		"share_user_prompt":      "👇 استخدم هذا الزر لمشاركة أي مستخدم من قائمة محادثاتك مع البوت، وسيتم استخراج اسمه ويوزره وآيديه تلقائياً:",
-		"user_shared_info":       "👤 *معلومات المستخدم المُشارك:*\n\nالاسم: %s\nاليوزر: %s\nالآيدي: `%d`",
-		"no_username":            "لا يوجد يوزر",
+		"main_menu_title":          "القائمة الرئيسية 🤖:",
+		"welcome":                  "أهلاً بك في لوحة تحكم البوت 🤖\nاختر من الأزرار أدناه للتحكم الكامل:",
+		"stop_btn":                 "🛑 إيقاف الرد",
+		"start_btn":                "🟢 تشغيل الرد",
+		"edit_text_btn":            "📝 تعديل نص الرد",
+		"media_reply_btn":          "🎬 الرد التلقائي بالوسائط",
+		"interaction_menu_btn":     "💬 الرد على التفاعلات",
+		"batch_story_btn":          "📚 نشر ستوريات متعددة",
+		"exclude_btn":              "👤 استثناء حساب",
+		"list_excluded_btn":        "📋 عرض المستثنين",
+		"clear_excluded_btn":       "🧹 مسح المستثنين",
+		"profile_menu_btn":         "🧑 إدارة الملف الشخصي",
+		"post_story_btn":           "📖 نشر قصة",
+		"lang_ar_btn":              "🇮🇶 العربية",
+		"lang_en_btn":              "🇺🇸 English",
+		"back_btn":                 "🔙 رجوع",
+		"stopped_msg":              "🛑 تم إيقاف الرد التلقائي بنجاح.",
+		"started_msg":              "🟢 تم تشغيل الرد التلقائي بنجاح.",
+		"edit_text_prompt":         "📝 أرسل الآن نص الرد التلقائي الجديد:",
+		"saved_text_msg":           "✅ تم حفظ نص الرد التلقائي الجديد بنجاح!",
+		"exclude_prompt":           "👤 أرسل ايدي الحساب المراد استثناؤه الآن:",
+		"invalid_id_msg":           "❌ أرقام فقط! أرسل الايدي بشكل صحيح.",
+		"id_added_msg":             "✅ تم إضافة الايدي `%d` إلى قائمة الاستثناء.",
+		"list_excluded_title":      "📋 **قائمة الحسابات المستثناة:**\n",
+		"no_excluded":              "لا يوجد حسابات مستثناة حالياً.",
+		"cleared_excluded_msg":     "🧹 تم مسح جميع الاستثناءات بنجاح.",
+		"profile_menu_title":       "🧑 إدارة الملف الشخصي - اختر ما تريد تعديله:",
+		"edit_first_name_btn":      "✏️ تعديل الاسم",
+		"edit_bio_btn":             "📝 تعديل النبذة",
+		"edit_photo_btn":           "🖼️ تعديل الصورة",
+		"edit_username_btn":        "🔗 تعديل اليوزر",
+		"no_business_connection":   "❌ لم يتم ربط حساب تجاري بعد بالبوت.",
+		"first_name_prompt":        "✏️ أرسل الآن الاسم الأول الجديد (والاسم الأخير بعده بمسافة، اختياري):",
+		"bio_prompt":               "📝 أرسل الآن النبذة الجديدة (حد أقصى 70 حرف):",
+		"username_prompt":          "🔗 أرسل الآن اسم المستخدم الجديد (بدون @):",
+		"photo_prompt":             "🖼️ أرسل الآن الصورة الجديدة لملفك الشخصي:",
+		"name_updated":             "✅ تم تعديل الاسم بنجاح!",
+		"bio_updated":              "✅ تم تعديل النبذة بنجاح!",
+		"username_updated":         "✅ تم تعديل اسم المستخدم بنجاح!",
+		"photo_updated":            "✅ تم تعديل صورة الملف الشخصي بنجاح!",
+		"select_story_duration":    "⏱️ اختر مدة ظهور القصة المطلوبة:",
+		"dur_6h":                   "6 ساعات",
+		"dur_12h":                  "12 ساعة",
+		"dur_24h":                  "24 ساعة",
+		"dur_48h":                  "48 ساعة",
+		"story_prompt":             "📖 أرسل الآن صورة أو فيديو (حد أقصى 60 ثانية) لنشره كقصة (ستبقى ظاهرة لمدة %s):",
+		"story_updated":            "✅ تم نشر القصة بنجاح على ملفك الشخصي! ستبقى ظاهرة لمدة %s.",
+		"your_id_msg":              "الايدي الخاص بك هو:\n`%d`",
+		"fail_name":                "❌ فشل تعديل الاسم: %s",
+		"fail_bio":                 "❌ فشل تعديل النبذة: %s",
+		"fail_username":            "❌ فشل تعديل اليوزر: %s",
+		"fail_photo":               "❌ فشل تعديل الصورة: %s",
+		"fail_story":               "❌ فشل نشر القصة: %s",
+		"need_real_photo":          "❌ أرسل صورة فعلية (لا يقبل ملفات أو نصوص).",
+		"need_real_media_story":    "❌ أرسل صورة أو فيديو فعلي لنشره كقصة.",
+		"video_too_long_error":     "الفيديو أطول من 60 ثانية، وهذا الحد الأقصى المسموح لقصص تليجرام",
+		"id_copy_btn":              "🆔 نسخ الآيدي",
+		"share_user_btn":           "👤 User",
+		"share_user_prompt":        "👇 استخدم هذا الزر لمشاركة أي مستخدم من قائمة محادثاتك مع البوت:",
+		"user_shared_info":         "👤 *معلومات المستخدم المُشارك:*\n\nالاسم: %s\nاليوزر: %s\nالآيدي: `%d`",
+		"no_username":              "لا يوجد يوزر",
 
-		// 🆕 نصوص الوسائط
-		"media_menu_title":       "🎬 اختر نوع الوسائط للرد التلقائي:",
-		"media_text_btn":         "📝 نص فقط",
-		"media_voice_btn":        "🎤 رسالة صوتية",
-		"media_audio_btn":        "🎵 ملف صوتي",
-		"media_gif_btn":          "🎞️ GIF متحرك",
-		"media_sticker_btn":      "😀 ملصق",
-		"media_video_btn":        "🎥 فيديو",
-		"media_photo_btn":        "🖼️ صورة",
-		"media_preview_btn":      "👁️ معاينة الرد الحالي",
-		"media_clear_btn":        "🗑️ حذف الوسائط والعودة للنص",
-		"media_upload_prompt":    "📤 أرسل الآن %s التي تريد استخدامها كرد تلقائي:",
-		"media_saved_msg":        "✅ تم حفظ الرد التلقائي بنجاح!\nالنوع: *%s*",
+		// نصوص الوسائط
+		"media_menu_title":         "🎬 اختر نوع الوسائط للرد التلقائي:",
+		"media_text_btn":           "📝 نص فقط",
+		"media_voice_btn":          "🎤 رسالة صوتية",
+		"media_audio_btn":          "🎵 ملف صوتي",
+		"media_gif_btn":            "🎞️ GIF متحرك",
+		"media_sticker_btn":        "😀 ملصق",
+		"media_video_btn":          "🎥 فيديو",
+		"media_photo_btn":          "🖼️ صورة",
+		"media_preview_btn":        "👁️ معاينة الرد الحالي",
+		"media_clear_btn":          "🗑️ حذف الوسائط والعودة للنص",
+		"media_upload_prompt":      "📤 أرسل الآن %s التي تريد استخدامها كرد تلقائي:",
+		"media_saved_msg":          "✅ تم حفظ الرد التلقائي بنجاح!\nالنوع: *%s*",
 		"media_saved_with_caption": "✅ تم حفظ الرد التلقائي بنجاح!\nالنوع: *%s*\nالنص المصاحب: %s",
-		"media_cleared_msg":      "🗑️ تم حذف الوسائط، الرد التلقائي الآن نصي فقط.",
-		"current_media_info":     "📌 *الرد التلقائي الحالي:*\n\nالنوع: *%s*\nالنص المصاحب: %s",
-		"no_media_set":           "⚠️ لا يوجد وسائط محددة حالياً، الرد نصي فقط.",
-		"need_media_error":       "❌ يجب إرسال %s فعلي!",
-		"media_type_voice":       "رسالة صوتية",
-		"media_type_audio":       "ملف صوتي",
-		"media_type_gif":         "GIF متحرك",
-		"media_type_sticker":     "ملصق",
-		"media_type_video":       "فيديو",
-		"media_type_photo":       "صورة",
-		"media_type_text":        "نص فقط",
-		"preview_media_caption":  "🔍 هذه معاينة للوسائط المحفوظة:",
-		"no_caption":             "بدون نص مصاحب",
+		"media_cleared_msg":        "🗑️ تم حذف الوسائط، الرد التلقائي الآن نصي فقط.",
+		"current_media_info":       "📌 *الرد التلقائي الحالي:*\n\nالنوع: *%s*\nالنص المصاحب: %s",
+		"no_media_set":             "⚠️ لا يوجد وسائط محددة حالياً، الرد نصي فقط.",
+		"need_media_error":         "❌ يجب إرسال %s فعلي!",
+		"media_type_voice":         "رسالة صوتية",
+		"media_type_audio":         "ملف صوتي",
+		"media_type_gif":           "GIF متحرك",
+		"media_type_sticker":       "ملصق",
+		"media_type_video":         "فيديو",
+		"media_type_photo":         "صورة",
+		"media_type_text":          "نص فقط",
+		"no_caption":               "بدون نص مصاحب",
+
+		// نصوص التفاعلات
+		"interaction_menu_title":   "💬 إعدادات الردود على التفاعلات:",
+		"reply_story_mention_btn":  "📸 الرد على ذكر البوت في ستوري",
+		"reply_reaction_btn":       "👍 الرد على الريأكشن",
+		"reply_voice_btn":          "🎤 الرد على الرسائل الصوتية",
+		"interaction_on":           "✅ مفعّل",
+		"interaction_off":          "❌ معطّل",
+		"story_mention_prompt":     "📸 أرسل نص الرد على ذكر البوت في الستوري:",
+		"reaction_prompt":          "👍 أرسل نص الرد على الريأكشن:",
+		"voice_reply_prompt":       "🎤 أرسل نص الرد على الرسائل الصوتية:",
+		"story_mention_detected":   "📸 قام العميل %s بذكر البوت في ستوري!",
+		"reaction_detected":        "👍 تفاعل العميل %s بريأكشن %s",
+		"voice_msg_detected":       "🎤 أرسل العميل %s رسالة صوتية (%d ثانية)",
+
+		// نصوص الستوريات المتعددة
+		"batch_story_title":        "📚 إعداد قائمة الستوريات للنشر المتسلسل\n\nيمكنك إضافة حتى 100 ستوري وسيتم نشرها على ملفك الشخصي:",
+		"batch_story_add":          "➕ إضافة عنصر",
+		"batch_story_list":         "📋 عرض القائمة",
+		"batch_story_clear":        "🗑️ مسح القائمة",
+		"batch_story_publish":      "🚀 نشر الكل الآن",
+		"batch_story_prompt":       "📤 أرسل الآن صورة أو فيديو لإضافته إلى القائمة:",
+		"batch_story_added":        "✅ تمت الإضافة! المجموع: %d عنصر",
+		"batch_story_empty":        "⚠️ القائمة فارغة، أضف عناصر أولاً.",
+		"batch_story_list_title":   "📋 *قائمة الستوريات (%d عنصر):*\n",
+		"batch_story_item_line":    "%d. %s\n",
+		"batch_story_cleared":      "🗑️ تم مسح القائمة بالكامل.",
+		"batch_story_publishing":   "🚀 جاري النشر على ملفك الشخصي...\nسيتم إعلامك بالنتيجة.",
+		"batch_story_publish_done": "✅ تم نشر %d من %d ستوري بنجاح على ملفك الشخصي!",
+		"batch_story_publish_fail": "⚠️ فشل نشر %d عنصر من أصل %d.",
+		"batch_story_need_media":   "❌ أرسل صورة أو فيديو فعلي.",
 	},
 	"en": {
-		"main_menu_title":        "Main Menu 🤖:",
-		"welcome":                "Welcome to the bot control panel 🤖\nChoose from the buttons below for full control:",
-		"stop_btn":               "🛑 Stop Auto-Reply",
-		"start_btn":              "🟢 Start Auto-Reply",
-		"edit_text_btn":          "📝 Edit Reply Text",
-		"media_reply_btn":        "🎬 Media Auto-Reply",
-		"exclude_btn":            "👤 Exclude Account",
-		"list_excluded_btn":      "📋 View Excluded",
-		"clear_excluded_btn":     "🧹 Clear Excluded",
-		"profile_menu_btn":       "🧑 Manage Profile",
-		"post_story_btn":         "📖 Post Story",
-		"lang_ar_btn":            "🇮🇶 العربية",
-		"lang_en_btn":            "🇺🇸 English",
-		"back_btn":               "🔙 Back",
-		"stopped_msg":            "🛑 Auto-reply has been stopped.",
-		"started_msg":            "🟢 Auto-reply has been started.",
-		"edit_text_prompt":       "📝 Send the new auto-reply text now:",
-		"saved_text_msg":         "✅ New auto-reply text saved successfully!",
-		"exclude_prompt":         "👤 Send the account ID to exclude now:",
-		"invalid_id_msg":         "❌ Numbers only! Please send a valid ID.",
-		"id_added_msg":           "✅ ID `%d` added to the exclusion list.",
-		"list_excluded_title":    "📋 **Excluded Accounts:**\n",
-		"no_excluded":            "No excluded accounts currently.",
-		"cleared_excluded_msg":   "🧹 All exclusions cleared successfully.",
-		"profile_menu_title":     "🧑 Manage Profile - choose what to edit:",
-		"edit_first_name_btn":    "✏️ Edit Name",
-		"edit_bio_btn":           "📝 Edit Bio",
-		"edit_photo_btn":         "🖼️ Edit Photo",
-		"edit_username_btn":      "🔗 Edit Username",
-		"no_business_connection": "❌ No business account connected to the bot yet.",
-		"first_name_prompt":      "✏️ Send the new first name now (optionally followed by a last name):",
-		"bio_prompt":             "📝 Send the new bio now (max 70 characters):",
-		"username_prompt":        "🔗 Send the new username now (without @):",
-		"photo_prompt":           "🖼️ Send the new profile photo now:",
-		"name_updated":           "✅ Name updated successfully!",
-		"bio_updated":            "✅ Bio updated successfully!",
-		"username_updated":       "✅ Username updated successfully!",
-		"photo_updated":          "✅ Profile photo updated successfully!",
-		"select_story_duration":  "⏱️ Select story duration:",
-		"dur_6h":                 "6 Hours",
-		"dur_12h":                "12 Hours",
-		"dur_24h":                "24 Hours",
-		"dur_48h":                "48 Hours",
-		"story_prompt":           "📖 Send a photo or video now (max 60 seconds) to post as a story (visible for %s):",
-		"story_updated":          "✅ Story posted successfully! It will remain visible for %s.",
-		"your_id_msg":            "Your ID is:\n`%d`",
-		"fail_name":              "❌ Failed to update name: %s",
-		"fail_bio":               "❌ Failed to update bio: %s",
-		"fail_username":          "❌ Failed to update username: %s",
-		"fail_photo":             "❌ Failed to update photo: %s",
-		"fail_story":             "❌ Failed to post story: %s",
-		"need_real_photo":        "❌ Please send an actual photo (files or text not accepted).",
-		"need_real_media_story":  "❌ Please send an actual photo or video to post as a story.",
-		"video_too_long_error":   "The video is longer than 60 seconds, which is Telegram's maximum allowed for stories",
-		"id_copy_btn":            "🆔 Copy ID",
-		"share_user_btn":         "👤 User",
-		"share_user_prompt":      "👇 Use this button to share any user from your chat list with the bot — their name, username and ID will be extracted automatically:",
-		"user_shared_info":       "👤 *Shared User Info:*\n\nName: %s\nUsername: %s\nID: `%d`",
-		"no_username":            "No username",
+		"main_menu_title":          "Main Menu 🤖:",
+		"welcome":                  "Welcome to the bot control panel 🤖\nChoose from the buttons below for full control:",
+		"stop_btn":                 "🛑 Stop Auto-Reply",
+		"start_btn":                "🟢 Start Auto-Reply",
+		"edit_text_btn":            "📝 Edit Reply Text",
+		"media_reply_btn":          "🎬 Media Auto-Reply",
+		"interaction_menu_btn":     "💬 Reply to Interactions",
+		"batch_story_btn":          "📚 Publish Multiple Stories",
+		"exclude_btn":              "👤 Exclude Account",
+		"list_excluded_btn":        "📋 View Excluded",
+		"clear_excluded_btn":       "🧹 Clear Excluded",
+		"profile_menu_btn":         "🧑 Manage Profile",
+		"post_story_btn":           "📖 Post Story",
+		"lang_ar_btn":              "🇮🇶 العربية",
+		"lang_en_btn":              "🇺🇸 English",
+		"back_btn":                 "🔙 Back",
+		"stopped_msg":              "🛑 Auto-reply has been stopped.",
+		"started_msg":              "🟢 Auto-reply has been started.",
+		"edit_text_prompt":         "📝 Send the new auto-reply text now:",
+		"saved_text_msg":           "✅ New auto-reply text saved successfully!",
+		"exclude_prompt":           "👤 Send the account ID to exclude now:",
+		"invalid_id_msg":           "❌ Numbers only! Please send a valid ID.",
+		"id_added_msg":             "✅ ID `%d` added to the exclusion list.",
+		"list_excluded_title":      "📋 **Excluded Accounts:**\n",
+		"no_excluded":              "No excluded accounts currently.",
+		"cleared_excluded_msg":     "🧹 All exclusions cleared successfully.",
+		"profile_menu_title":       "🧑 Manage Profile - choose what to edit:",
+		"edit_first_name_btn":      "✏️ Edit Name",
+		"edit_bio_btn":             "📝 Edit Bio",
+		"edit_photo_btn":           "🖼️ Edit Photo",
+		"edit_username_btn":        "🔗 Edit Username",
+		"no_business_connection":   "❌ No business account connected to the bot yet.",
+		"first_name_prompt":        "✏️ Send the new first name now (optionally followed by a last name):",
+		"bio_prompt":               "📝 Send the new bio now (max 70 characters):",
+		"username_prompt":          "🔗 Send the new username now (without @):",
+		"photo_prompt":             "🖼️ Send the new profile photo now:",
+		"name_updated":             "✅ Name updated successfully!",
+		"bio_updated":              "✅ Bio updated successfully!",
+		"username_updated":         "✅ Username updated successfully!",
+		"photo_updated":            "✅ Profile photo updated successfully!",
+		"select_story_duration":    "⏱️ Select story duration:",
+		"dur_6h":                   "6 Hours",
+		"dur_12h":                  "12 Hours",
+		"dur_24h":                  "24 Hours",
+		"dur_48h":                  "48 Hours",
+		"story_prompt":             "📖 Send a photo or video now (max 60 seconds) to post as a story (visible for %s):",
+		"story_updated":            "✅ Story posted successfully on your profile! It will remain visible for %s.",
+		"your_id_msg":              "Your ID is:\n`%d`",
+		"fail_name":                "❌ Failed to update name: %s",
+		"fail_bio":                 "❌ Failed to update bio: %s",
+		"fail_username":            "❌ Failed to update username: %s",
+		"fail_photo":               "❌ Failed to update photo: %s",
+		"fail_story":               "❌ Failed to post story: %s",
+		"need_real_photo":          "❌ Please send an actual photo (files or text not accepted).",
+		"need_real_media_story":    "❌ Please send an actual photo or video to post as a story.",
+		"video_too_long_error":     "The video is longer than 60 seconds, which is Telegram's maximum allowed for stories",
+		"id_copy_btn":              "🆔 Copy ID",
+		"share_user_btn":           "👤 User",
+		"share_user_prompt":        "👇 Use this button to share any user from your chat list:",
+		"user_shared_info":         "👤 *Shared User Info:*\n\nName: %s\nUsername: %s\nID: `%d`",
+		"no_username":              "No username",
 
-		// 🆕 Media texts
-		"media_menu_title":       "🎬 Choose media type for auto-reply:",
-		"media_text_btn":         "📝 Text Only",
-		"media_voice_btn":        "🎤 Voice Message",
-		"media_audio_btn":        "🎵 Audio File",
-		"media_gif_btn":          "🎞️ GIF Animation",
-		"media_sticker_btn":      "😀 Sticker",
-		"media_video_btn":        "🎥 Video",
-		"media_photo_btn":        "🖼️ Photo",
-		"media_preview_btn":      "👁️ Preview Current Reply",
-		"media_clear_btn":        "🗑️ Clear Media & Back to Text",
-		"media_upload_prompt":    "📤 Send the %s you want to use as auto-reply now:",
-		"media_saved_msg":        "✅ Auto-reply saved successfully!\nType: *%s*",
+		"media_menu_title":         "🎬 Choose media type for auto-reply:",
+		"media_text_btn":           "📝 Text Only",
+		"media_voice_btn":          "🎤 Voice Message",
+		"media_audio_btn":          "🎵 Audio File",
+		"media_gif_btn":            "🎞️ GIF Animation",
+		"media_sticker_btn":        "😀 Sticker",
+		"media_video_btn":          "🎥 Video",
+		"media_photo_btn":          "🖼️ Photo",
+		"media_preview_btn":        "👁️ Preview Current Reply",
+		"media_clear_btn":          "🗑️ Clear Media & Back to Text",
+		"media_upload_prompt":      "📤 Send the %s you want to use as auto-reply now:",
+		"media_saved_msg":          "✅ Auto-reply saved successfully!\nType: *%s*",
 		"media_saved_with_caption": "✅ Auto-reply saved successfully!\nType: *%s*\nCaption: %s",
-		"media_cleared_msg":      "🗑️ Media cleared, auto-reply is now text only.",
-		"current_media_info":     "📌 *Current Auto-Reply:*\n\nType: *%s*\nCaption: %s",
-		"no_media_set":           "⚠️ No media set currently, reply is text only.",
-		"need_media_error":       "❌ You must send an actual %s!",
-		"media_type_voice":       "Voice Message",
-		"media_type_audio":       "Audio File",
-		"media_type_gif":         "GIF Animation",
-		"media_type_sticker":     "Sticker",
-		"media_type_video":       "Video",
-		"media_type_photo":       "Photo",
-		"media_type_text":        "Text Only",
-		"preview_media_caption":  "🔍 This is a preview of the saved media:",
-		"no_caption":             "No caption",
+		"media_cleared_msg":        "🗑️ Media cleared, auto-reply is now text only.",
+		"current_media_info":       "📌 *Current Auto-Reply:*\n\nType: *%s*\nCaption: %s",
+		"no_media_set":             "⚠️ No media set currently, reply is text only.",
+		"need_media_error":         "❌ You must send an actual %s!",
+		"media_type_voice":         "Voice Message",
+		"media_type_audio":         "Audio File",
+		"media_type_gif":           "GIF Animation",
+		"media_type_sticker":       "Sticker",
+		"media_type_video":         "Video",
+		"media_type_photo":         "Photo",
+		"media_type_text":          "Text Only",
+		"no_caption":               "No caption",
+
+		"interaction_menu_title":   "💬 Interaction Reply Settings:",
+		"reply_story_mention_btn":  "📸 Reply to Story Mention",
+		"reply_reaction_btn":       "👍 Reply to Reaction",
+		"reply_voice_btn":          "🎤 Reply to Voice Messages",
+		"interaction_on":           "✅ Enabled",
+		"interaction_off":          "❌ Disabled",
+		"story_mention_prompt":     "📸 Send the reply text for story mentions:",
+		"reaction_prompt":          "👍 Send the reply text for reactions:",
+		"voice_reply_prompt":       "🎤 Send the reply text for voice messages:",
+		"story_mention_detected":   "📸 Customer %s mentioned the bot in a story!",
+		"reaction_detected":        "👍 Customer %s reacted with %s",
+		"voice_msg_detected":       "🎤 Customer %s sent a voice message (%d seconds)",
+
+		"batch_story_title":        "📚 Setup Batch Stories Queue\n\nYou can add up to 100 stories, they will be published to your profile:",
+		"batch_story_add":          "➕ Add Item",
+		"batch_story_list":         "📋 View List",
+		"batch_story_clear":        "🗑️ Clear List",
+		"batch_story_publish":      "🚀 Publish All Now",
+		"batch_story_prompt":       "📤 Send a photo or video to add to the queue:",
+		"batch_story_added":        "✅ Added! Total: %d items",
+		"batch_story_empty":        "⚠️ Queue is empty, add items first.",
+		"batch_story_list_title":   "📋 *Stories Queue (%d items):*\n",
+		"batch_story_item_line":    "%d. %s\n",
+		"batch_story_cleared":      "🗑️ Queue cleared completely.",
+		"batch_story_publishing":   "🚀 Publishing to your profile...\nYou'll be notified.",
+		"batch_story_publish_done": "✅ Published %d of %d stories to your profile!",
+		"batch_story_publish_fail": "⚠️ Failed to publish %d of %d.",
+		"batch_story_need_media":   "❌ Send actual photo or video.",
 	},
 }
 
@@ -245,7 +310,6 @@ func tr(lang, key string) string {
 	return key
 }
 
-// دالة الحصول على اسم نوع الوسائط المترجم
 func mediaTypeName(lang, mediaType string) string {
 	switch mediaType {
 	case "voice":
@@ -280,7 +344,14 @@ func getDurationLabel(lang, period string) string {
 	}
 }
 
-// دالة الترجمة الفورية والكشف التلقائي عن لغة النص
+func toggleLabel(lang string, enabled bool) string {
+	if enabled {
+		return tr(lang, "interaction_on")
+	}
+	return tr(lang, "interaction_off")
+}
+
+// دالة الترجمة الفورية
 func translateText(text, targetLang string) (string, string, error) {
 	if strings.TrimSpace(text) == "" {
 		return "", "", nil
@@ -326,35 +397,41 @@ func translateText(text, targetLang string) (string, string, error) {
 	return translatedText, detectedLang, nil
 }
 
+// ============== الهياكل ==============
+
 type BotConfig struct {
 	IsStopped      bool    `json:"is_stopped"`
 	AutoReply      string  `json:"auto_reply"`
-	ReplyType      string  `json:"reply_type"`    // "text" | "voice" | "audio" | "gif" | "sticker" | "video" | "photo"
-	ReplyFileID    string  `json:"reply_file_id"` // file_id للوسائط
-	ReplyCaption   string  `json:"reply_caption"` // نص مصاحب للوسائط
+	ReplyType      string  `json:"reply_type"`
+	ReplyFileID    string  `json:"reply_file_id"`
+	ReplyCaption   string  `json:"reply_caption"`
 	Excluded       []int64 `json:"excluded"`
 	State          string  `json:"state"`
 	BusinessConnID string  `json:"business_conn_id"`
 	Lang           string  `json:"lang"`
+
+	// إعدادات التفاعلات
+	ReplyToStoryMention bool   `json:"reply_to_story_mention"`
+	ReplyToReaction     bool   `json:"reply_to_reaction"`
+	ReplyToVoice        bool   `json:"reply_to_voice"`
+	StoryMentionReply   string `json:"story_mention_reply"`
+	ReactionReply       string `json:"reaction_reply"`
+	VoiceReply          string `json:"voice_reply"`
+}
+
+// 🆕 عنصر ستوري
+type StoryItem struct {
+	FileID       string `json:"file_id"`
+	MediaType    string `json:"media_type"`
+	Duration     int    `json:"duration"`
+	Caption      string `json:"caption"`
+	ActivePeriod string `json:"active_period"`
 }
 
 type TelegramUpdate struct {
-	Message         *Message       `json:"message"`
-	CallbackQuery   *CallbackQuery `json:"callback_query"`
-	BusinessMessage *struct {
-		MessageID int `json:"message_id"`
-		Chat      struct {
-			ID int64 `json:"id"`
-		} `json:"chat"`
-		From struct {
-			ID        int64  `json:"id"`
-			FirstName string `json:"first_name"`
-			IsBot     bool   `json:"is_bot"`
-		} `json:"from"`
-		Text                 string `json:"text"`
-		IsOutgoing           bool   `json:"is_outgoing"`
-		BusinessConnectionID string `json:"business_connection_id"`
-	} `json:"business_message"`
+	Message            *Message       `json:"message"`
+	CallbackQuery      *CallbackQuery `json:"callback_query"`
+	BusinessMessage    *BusinessMessage `json:"business_message"`
 	BusinessConnection *struct {
 		ID   string `json:"id"`
 		User struct {
@@ -367,6 +444,57 @@ type TelegramUpdate struct {
 		Date       int64 `json:"date"`
 		IsEnabled  bool  `json:"is_enabled"`
 	} `json:"business_connection"`
+}
+
+type BusinessMessage struct {
+	MessageID int `json:"message_id"`
+	Chat      struct {
+		ID int64 `json:"id"`
+	} `json:"chat"`
+	From struct {
+		ID        int64  `json:"id"`
+		FirstName string `json:"first_name"`
+		IsBot     bool   `json:"is_bot"`
+	} `json:"from"`
+	Text                 string `json:"text"`
+	IsOutgoing           bool   `json:"is_outgoing"`
+	BusinessConnectionID string `json:"business_connection_id"`
+
+	Story    *Story          `json:"story"`
+	Reaction *ReactionUpdate `json:"reaction"`
+	Voice    *Voice          `json:"voice"`
+	Photo    []PhotoSize     `json:"photo"`
+	Video    *Video          `json:"video"`
+
+	ReplyToMessage *struct {
+		MessageID int `json:"message_id"`
+	} `json:"reply_to_message"`
+}
+
+type Story struct {
+	Chat struct {
+		ID int64 `json:"id"`
+	} `json:"chat"`
+	ID int `json:"id"`
+}
+
+type ReactionUpdate struct {
+	Chat struct {
+		ID int64 `json:"id"`
+	} `json:"chat"`
+	MessageID int `json:"message_id"`
+	User      struct {
+		ID        int64  `json:"id"`
+		FirstName string `json:"first_name"`
+		Username  string `json:"username"`
+	} `json:"user"`
+	OldReaction []ReactionType `json:"old_reaction"`
+	NewReaction []ReactionType `json:"new_reaction"`
+}
+
+type ReactionType struct {
+	Type  string `json:"type"`
+	Emoji string `json:"emoji"`
 }
 
 type PhotoSize struct {
@@ -382,7 +510,6 @@ type Video struct {
 	Duration int    `json:"duration"`
 }
 
-// 🆕 هياكل الوسائط الجديدة
 type Voice struct {
 	FileID   string `json:"file_id"`
 	Duration int    `json:"duration"`
@@ -413,7 +540,6 @@ type Document struct {
 	MimeType string `json:"mime_type"`
 }
 
-// معلومات مستخدم واحد تم مشاركته عبر زر request_users
 type SharedUserInfo struct {
 	UserID    int64  `json:"user_id"`
 	FirstName string `json:"first_name"`
@@ -435,14 +561,14 @@ type Message struct {
 		ID int64 `json:"id"`
 	} `json:"from"`
 	Text        string           `json:"text"`
-	Caption     string           `json:"caption"` // 🆕
+	Caption     string           `json:"caption"`
 	Photo       []PhotoSize      `json:"photo"`
 	Video       *Video           `json:"video"`
-	Voice       *Voice           `json:"voice"`     // 🆕
-	Audio       *Audio           `json:"audio"`     // 🆕
-	Animation   *Animation       `json:"animation"` // 🆕 GIF
-	Sticker     *Sticker         `json:"sticker"`   // 🆕
-	Document    *Document        `json:"document"`  // 🆕
+	Voice       *Voice           `json:"voice"`
+	Audio       *Audio           `json:"audio"`
+	Animation   *Animation       `json:"animation"`
+	Sticker     *Sticker         `json:"sticker"`
+	Document    *Document        `json:"document"`
 	UsersShared *UsersSharedData `json:"users_shared"`
 }
 
@@ -464,6 +590,13 @@ type BusinessConnectionResponse struct {
 		UserChatID int64 `json:"user_chat_id"`
 	} `json:"result"`
 }
+
+type apiResult struct {
+	Ok          bool   `json:"ok"`
+	Description string `json:"description"`
+}
+
+// ============== Handler الرئيسي ==============
 
 func Handler(w http.ResponseWriter, r *http.Request) {
 	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
@@ -487,7 +620,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. معالجة الضغط على الأزرار الشفافة
+	// ============ 1. معالجة الأزرار ============
 	if update.CallbackQuery != nil {
 		cb := update.CallbackQuery
 		answerCallback(botToken, cb.ID)
@@ -520,7 +653,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			saveConfig(botToken, adminID, config, msgID)
 			sendMenu(botToken, adminID, lang, tr(lang, "started_msg"))
 		case "edit_text":
-			// عند اختيار نص فقط، نصفّر الوسائط
 			config.ReplyType = "text"
 			config.ReplyFileID = ""
 			config.ReplyCaption = ""
@@ -528,7 +660,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			saveConfig(botToken, adminID, config, msgID)
 			sendSubMenu(botToken, adminID, lang, tr(lang, "edit_text_prompt"))
 
-		// 🆕 فتح قائمة الوسائط
+		// ===== قائمة الوسائط =====
 		case "media_menu":
 			config.State = ""
 			saveConfig(botToken, adminID, config, msgID)
@@ -558,7 +690,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				}
 				previewText = fmt.Sprintf(tr(lang, "current_media_info"), mediaTypeName(lang, config.ReplyType), caption)
 				sendSubMenu(botToken, adminID, lang, previewText)
-				// إرسال معاينة فعلية للوسائط
 				sendPreviewMedia(botToken, adminID, config.ReplyType, config.ReplyFileID, config.ReplyCaption)
 				w.WriteHeader(http.StatusOK)
 				return
@@ -573,6 +704,131 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			saveConfig(botToken, adminID, config, msgID)
 			sendMenu(botToken, adminID, lang, tr(lang, "media_cleared_msg"))
 
+		// ===== قائمة التفاعلات =====
+		case "interaction_menu":
+			config.State = ""
+			saveConfig(botToken, adminID, config, msgID)
+			sendInteractionMenu(botToken, adminID, lang, config)
+
+		case "toggle_story_mention":
+			config.ReplyToStoryMention = !config.ReplyToStoryMention
+			config.State = ""
+			saveConfig(botToken, adminID, config, msgID)
+			sendInteractionMenu(botToken, adminID, lang, config)
+
+		case "toggle_reaction":
+			config.ReplyToReaction = !config.ReplyToReaction
+			config.State = ""
+			saveConfig(botToken, adminID, config, msgID)
+			sendInteractionMenu(botToken, adminID, lang, config)
+
+		case "toggle_voice":
+			config.ReplyToVoice = !config.ReplyToVoice
+			config.State = ""
+			saveConfig(botToken, adminID, config, msgID)
+			sendInteractionMenu(botToken, adminID, lang, config)
+
+		case "edit_story_reply":
+			config.State = "waiting_story_reply"
+			saveConfig(botToken, adminID, config, msgID)
+			sendSubMenu(botToken, adminID, lang, tr(lang, "story_mention_prompt"))
+
+		case "edit_reaction_reply":
+			config.State = "waiting_reaction_reply"
+			saveConfig(botToken, adminID, config, msgID)
+			sendSubMenu(botToken, adminID, lang, tr(lang, "reaction_prompt"))
+
+		case "edit_voice_reply":
+			config.State = "waiting_voice_reply"
+			saveConfig(botToken, adminID, config, msgID)
+			sendSubMenu(botToken, adminID, lang, tr(lang, "voice_reply_prompt"))
+
+		// ===== قائمة الستوريات المتعددة =====
+		case "batch_story_menu":
+			config.State = ""
+			saveConfig(botToken, adminID, config, msgID)
+			storyBatchMu.Lock()
+			count := len(storyBatch[adminID])
+			storyBatchMu.Unlock()
+			sendBatchStoryMenu(botToken, adminID, lang, count)
+
+		case "batch_add":
+			if config.BusinessConnID == "" {
+				sendMenu(botToken, adminID, lang, tr(lang, "no_business_connection"))
+				break
+			}
+			config.State = "waiting_batch_item"
+			saveConfig(botToken, adminID, config, msgID)
+			sendSubMenu(botToken, adminID, lang, tr(lang, "batch_story_prompt"))
+
+		case "batch_list":
+			storyBatchMu.Lock()
+			items := storyBatch[adminID]
+			storyBatchMu.Unlock()
+
+			if len(items) == 0 {
+				sendBatchStoryMenu(botToken, adminID, lang, 0)
+				sendMessage(botToken, adminID, tr(lang, "batch_story_empty"))
+				break
+			}
+			txt := fmt.Sprintf(tr(lang, "batch_story_list_title"), len(items))
+			for i, item := range items {
+				mediaIcon := "🖼️"
+				if item.MediaType == "video" {
+					mediaIcon = "🎥"
+				}
+				dur := getDurationLabel(lang, item.ActivePeriod)
+				txt += fmt.Sprintf(tr(lang, "batch_story_item_line"), i+1, mediaIcon+" "+dur)
+			}
+			sendSubMenu(botToken, adminID, lang, txt)
+
+		case "batch_clear":
+			storyBatchMu.Lock()
+			storyBatch[adminID] = []StoryItem{}
+			storyBatchMu.Unlock()
+			config.State = ""
+			saveConfig(botToken, adminID, config, msgID)
+			sendBatchStoryMenu(botToken, adminID, lang, 0)
+
+		case "batch_publish":
+			storyBatchMu.Lock()
+			items := storyBatch[adminID]
+			storyBatchMu.Unlock()
+
+			if len(items) == 0 {
+				sendMessage(botToken, adminID, tr(lang, "batch_story_empty"))
+				break
+			}
+
+			if config.BusinessConnID == "" {
+				sendMessage(botToken, adminID, tr(lang, "no_business_connection"))
+				break
+			}
+
+			sendMessage(botToken, adminID, tr(lang, "batch_story_publishing"))
+
+			// نسخ للاستخدام في goroutine
+			itemsCopy := make([]StoryItem, len(items))
+			copy(itemsCopy, items)
+			bizID := config.BusinessConnID
+			langCopy := lang
+
+			go func() {
+				success, fail := publishBatchStories(botToken, bizID, itemsCopy, langCopy)
+
+				resultMsg := fmt.Sprintf(tr(langCopy, "batch_story_publish_done"), success, len(itemsCopy))
+				if fail > 0 {
+					resultMsg += "\n" + fmt.Sprintf(tr(langCopy, "batch_story_publish_fail"), fail, len(itemsCopy))
+				}
+				sendMessage(botToken, adminID, resultMsg)
+
+				// تفريغ القائمة
+				storyBatchMu.Lock()
+				storyBatch[adminID] = []StoryItem{}
+				storyBatchMu.Unlock()
+			}()
+
+		// ===== باقي الأزرار =====
 		case "exclude":
 			config.State = "waiting_id"
 			saveConfig(botToken, adminID, config, msgID)
@@ -655,7 +911,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. معالجة محادثة التحكم الخاصة بك
+	// ============ 2. معالجة الرسائل الخاصة بالمشرف ============
 	if update.Message != nil {
 		msg := update.Message
 		chatID := msg.Chat.ID
@@ -663,7 +919,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		config, msgID := getConfig(botToken, chatID)
 		lang := config.Lang
 
-		// الرد على كلمة "بوت" في الخاص بالبوت
 		if strings.TrimSpace(msg.Text) == "بوت" || strings.Contains(msg.Text, "بوت") {
 			sendNerdBotInfo(botToken, chatID)
 			w.WriteHeader(http.StatusOK)
@@ -699,7 +954,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// 🆕 معالجة رفع الوسائط بناءً على الحالة
+		// ===== معالجة حالات الوسائط =====
 		if strings.HasPrefix(config.State, "waiting_media_") {
 			mediaType := strings.TrimPrefix(config.State, "waiting_media_")
 			var fileID string
@@ -754,13 +1009,70 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				sendMenu(botToken, chatID, lang, fmt.Sprintf(tr(lang, "media_saved_msg"), typeName))
 			}
 
-			// إرسال معاينة فورية
 			sendPreviewMedia(botToken, chatID, mediaType, fileID, msg.Caption)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		if config.State == "waiting_text" {
+		// ===== معالجة حالات الردود المخصصة للتفاعلات =====
+		if config.State == "waiting_story_reply" {
+			config.StoryMentionReply = msg.Text
+			config.State = ""
+			saveConfig(botToken, chatID, config, msgID)
+			sendInteractionMenu(botToken, chatID, lang, config)
+		} else if config.State == "waiting_reaction_reply" {
+			config.ReactionReply = msg.Text
+			config.State = ""
+			saveConfig(botToken, chatID, config, msgID)
+			sendInteractionMenu(botToken, chatID, lang, config)
+		} else if config.State == "waiting_voice_reply" {
+			config.VoiceReply = msg.Text
+			config.State = ""
+			saveConfig(botToken, chatID, config, msgID)
+			sendInteractionMenu(botToken, chatID, lang, config)
+
+		// ===== معالجة إضافة عنصر للستوريات =====
+		} else if config.State == "waiting_batch_item" {
+			var fileID, mediaType string
+			var duration int
+
+			if msg.Video != nil {
+				fileID = msg.Video.FileID
+				mediaType = "video"
+				duration = msg.Video.Duration
+			} else if len(msg.Photo) > 0 {
+				fileID = msg.Photo[len(msg.Photo)-1].FileID
+				mediaType = "photo"
+			} else {
+				sendSubMenu(botToken, chatID, lang, tr(lang, "batch_story_need_media"))
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			newItem := StoryItem{
+				FileID:       fileID,
+				MediaType:    mediaType,
+				Duration:     duration,
+				Caption:      msg.Caption,
+				ActivePeriod: "86400", // 24 ساعة افتراضياً
+			}
+
+			storyBatchMu.Lock()
+			if storyBatch[chatID] == nil {
+				storyBatch[chatID] = []StoryItem{}
+			}
+			storyBatch[chatID] = append(storyBatch[chatID], newItem)
+			count := len(storyBatch[chatID])
+			storyBatchMu.Unlock()
+
+			config.State = ""
+			saveConfig(botToken, chatID, config, msgID)
+
+			sendMessage(botToken, chatID, fmt.Sprintf(tr(lang, "batch_story_added"), count))
+			sendBatchStoryMenu(botToken, chatID, lang, count)
+
+		// ===== الحالات القديمة =====
+		} else if config.State == "waiting_text" {
 			config.AutoReply = msg.Text
 			config.ReplyType = "text"
 			config.ReplyFileID = ""
@@ -803,7 +1115,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			}
 		} else if config.State == "waiting_bio" {
 			if len([]rune(msg.Text)) > 70 {
-				sendSubMenu(botToken, chatID, lang, "❌ النبذة طويلة جداً! الحد الأقصى المسموح به من تيليجرام هو 70 حرفاً فقط.\nأرسل نبذة أقصر:")
+				sendSubMenu(botToken, chatID, lang, "❌ النبذة طويلة جداً! الحد الأقصى 70 حرفاً.")
 			} else if err := setBusinessAccountBio(botToken, config.BusinessConnID, msg.Text); err != nil {
 				sendSubMenu(botToken, chatID, lang, fmt.Sprintf(tr(lang, "fail_bio"), err.Error()))
 			} else {
@@ -860,16 +1172,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. معالجة رسائل العملاء (Business Messages)
+	// ============ 3. معالجة رسائل العملاء (Business Messages) ============
 	if update.BusinessMessage != nil {
 		msg := update.BusinessMessage
 
-		if msg.IsOutgoing {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		if msg.From.IsBot {
+		if msg.IsOutgoing || msg.From.IsBot {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -902,14 +1209,40 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// الرد على كلمة "بوت" في محادثات الأعمال أيضاً
+		customerName := msg.From.FirstName
+		if customerName == "" {
+			customerName = "صديقي"
+		}
+
+		// 🆕 معالجة الرد على الستوري (Story Mention)
+		if msg.Story != nil && config.ReplyToStoryMention {
+			handleStoryMention(botToken, adminID, config, customerChatID, senderID, customerName, msg)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// 🆕 معالجة الريأكشن
+		if msg.Reaction != nil && config.ReplyToReaction {
+			handleReaction(botToken, adminID, config, customerChatID, senderID, customerName, msg)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// 🆕 معالجة الرسالة الصوتية
+		if msg.Voice != nil && config.ReplyToVoice {
+			handleVoiceMessage(botToken, adminID, config, customerChatID, senderID, customerName, msg)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// الرد على كلمة "بوت"
 		if strings.TrimSpace(msg.Text) == "بوت" || strings.Contains(msg.Text, "بوت") {
 			sendNerdBotInfoBusiness(botToken, customerChatID, msg.BusinessConnectionID)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		// ⏱️ نظام التهدئة (Cooldown) لمدة 30 دقيقة لكل مستخدم
+		// نظام التهدئة
 		cooldownMu.Lock()
 		if userCooldowns[adminID] == nil {
 			userCooldowns[adminID] = make(map[int64]time.Time)
@@ -921,11 +1254,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 		userCooldowns[adminID][senderID] = time.Now().Add(30 * time.Minute)
 		cooldownMu.Unlock()
-
-		customerName := msg.From.FirstName
-		if customerName == "" {
-			customerName = "صديقي"
-		}
 
 		var detectedLang string
 		if strings.TrimSpace(msg.Text) != "" {
@@ -942,16 +1270,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// 🎬 التحقق أولاً: هل الرد التلقائي من نوع وسائط؟
+		// الرد بالوسائط إذا كان مفعّلاً
 		if config.ReplyType != "" && config.ReplyType != "text" && config.ReplyFileID != "" {
-			// استبدال متغيرات الاسم في الكابشن
 			caption := config.ReplyCaption
 			if caption != "" {
 				caption = strings.ReplaceAll(caption, "{name}", customerName)
 				caption = strings.ReplaceAll(caption, "{الاسم}", customerName)
 				caption = strings.ReplaceAll(caption, "$name", customerName)
 
-				// ترجمة الكابشن للغة العميل إن لزم
 				if detectedLang != "" && detectedLang != "ar" {
 					if translatedCaption, _, err := translateText(caption, detectedLang); err == nil && translatedCaption != "" {
 						caption = translatedCaption
@@ -966,7 +1292,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// --- معالجة نص الرد التلقائي ودعم ومتغيرات الأسماء ($name و {name} و {الاسم}) ---
+		// الرد النصي
 		var replyText string
 		if strings.TrimSpace(msg.Text) == "" {
 			replyText = "شكراً لتواصلك يا " + customerName + " 🌸\nاستلمت رسالتك وسأرد عليك قريباً."
@@ -992,7 +1318,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. رصد تفعيل ربط حساب تجاري
+	// ============ 4. ربط الحساب التجاري ============
 	if update.BusinessConnection != nil {
 		bc := update.BusinessConnection
 		if bc.IsEnabled {
@@ -1010,6 +1336,73 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 }
+
+// ============== معالجات التفاعلات ==============
+
+func handleStoryMention(token string, adminID int64, config BotConfig, customerChatID, senderID int64, customerName string, msg *BusinessMessage) {
+	notifyText := fmt.Sprintf(
+		"📸 *ذكر جديد في ستوري!*\n\n👤 العميل: %s\n🆔 `%d`",
+		customerName, senderID,
+	)
+	sendMessage(token, adminID, notifyText)
+
+	replyText := config.StoryMentionReply
+	if replyText == "" {
+		replyText = "شكراً لذكرنا في ستوريك يا " + customerName + " 🌸"
+	}
+	replyText = strings.ReplaceAll(replyText, "{name}", customerName)
+	replyText = strings.ReplaceAll(replyText, "{الاسم}", customerName)
+	replyText = strings.ReplaceAll(replyText, "$name", customerName)
+
+	sendBusinessMessage(token, customerChatID, replyText, msg.BusinessConnectionID)
+}
+
+func handleReaction(token string, adminID int64, config BotConfig, customerChatID, senderID int64, customerName string, msg *BusinessMessage) {
+	emoji := ""
+	if len(msg.Reaction.NewReaction) > 0 {
+		emoji = msg.Reaction.NewReaction[0].Emoji
+	}
+	if emoji == "" {
+		return
+	}
+
+	notifyText := fmt.Sprintf(
+		"👍 *تفاعل جديد!*\n\n👤 العميل: %s\n🆔 `%d`\n😀 التفاعل: %s",
+		customerName, senderID, emoji,
+	)
+	sendMessage(token, adminID, notifyText)
+
+	replyText := config.ReactionReply
+	if replyText == "" {
+		replyText = "شكراً لتفاعلك يا " + customerName + " 🌸"
+	}
+	replyText = strings.ReplaceAll(replyText, "{name}", customerName)
+	replyText = strings.ReplaceAll(replyText, "{emoji}", emoji)
+	replyText = strings.ReplaceAll(replyText, "{الاسم}", customerName)
+	replyText = strings.ReplaceAll(replyText, "$name", customerName)
+
+	sendBusinessMessage(token, customerChatID, replyText, msg.BusinessConnectionID)
+}
+
+func handleVoiceMessage(token string, adminID int64, config BotConfig, customerChatID, senderID int64, customerName string, msg *BusinessMessage) {
+	notifyText := fmt.Sprintf(
+		"🎤 *رسالة صوتية جديدة!*\n\n👤 العميل: %s\n🆔 `%d`\n⏱️ المدة: %d ثانية",
+		customerName, senderID, msg.Voice.Duration,
+	)
+	sendMessage(token, adminID, notifyText)
+
+	replyText := config.VoiceReply
+	if replyText == "" {
+		replyText = "شكراً لرسالتك الصوتية يا " + customerName + " 🌸\nسأستمع لها وأرد عليك قريباً."
+	}
+	replyText = strings.ReplaceAll(replyText, "{name}", customerName)
+	replyText = strings.ReplaceAll(replyText, "{الاسم}", customerName)
+	replyText = strings.ReplaceAll(replyText, "$name", customerName)
+
+	sendBusinessMessage(token, customerChatID, replyText, msg.BusinessConnectionID)
+}
+
+// ============== دوال مساعدة ==============
 
 func getAdminIDFromBusinessConn(token string, connID string) int64 {
 	if connID == "" {
@@ -1163,47 +1556,27 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 	}
 }
 
-// إرسال معلومات البوت في الخاص
+// ============== إرسال الرسائل والقوائم ==============
+
 func sendNerdBotInfo(token string, chatID int64) {
 	text := "انا اسمي نيرد | Nerd من خلالي رح تقدر تنشر ستوريات غير محدودة بدون اشتراك مميز"
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{
-				{
-					"text":  "فعلني من هنا",
-					"url":   "https://t.me/Xhwe2/10",
-					"style": "success",
-				},
-			},
+			{{"text": "فعلني من هنا", "url": "https://t.me/Xhwe2/10", "style": "success"}},
 		},
 	}
-
-	payload := map[string]interface{}{
-		"chat_id":      chatID,
-		"text":         text,
-		"reply_markup": keyboard,
-	}
+	payload := map[string]interface{}{"chat_id": chatID, "text": text, "reply_markup": keyboard}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendNerdBotInfo:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
-// إرسال معلومات البوت عبر حساب الأعمال
 func sendNerdBotInfoBusiness(token string, chatID int64, bizID string) {
 	text := "انا اسمي نيرد | Nerd من خلالي رح تقدر تنشر ستوريات غير محدودة بدون اشتراك مميز"
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{
-				{
-					"text":  "فعلني من هنا",
-					"url":   "https://t.me/Xhwe2/10",
-					"style": "success",
-				},
-			},
+			{{"text": "فعلني من هنا", "url": "https://t.me/Xhwe2/10", "style": "success"}},
 		},
 	}
-
 	payload := map[string]interface{}{
 		"chat_id":                chatID,
 		"text":                   text,
@@ -1211,51 +1584,38 @@ func sendNerdBotInfoBusiness(token string, chatID int64, bizID string) {
 		"reply_markup":           keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendNerdBotInfoBusiness:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func sendStartPhoto(token string, chatID int64, lang string) {
-	payload := map[string]interface{}{
-		"chat_id": chatID,
-		"photo":   startPhotoURL,
-		"caption": tr(lang, "welcome"),
-	}
+	payload := map[string]interface{}{"chat_id": chatID, "photo": startPhotoURL, "caption": tr(lang, "welcome")}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendPhoto", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendStartPhoto:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendPhoto", "application/json", bytes.NewBuffer(b))
 }
 
 func sendUserShareKeyboard(token string, chatID int64, lang string) {
 	keyboard := map[string]interface{}{
 		"keyboard": [][]map[string]interface{}{
-			{
-				{
-					"text": tr(lang, "share_user_btn"),
-					"request_users": map[string]interface{}{
-						"request_id":       1,
-						"request_name":     true,
-						"request_username": true,
-					},
-					"style": "success",
+			{{
+				"text": tr(lang, "share_user_btn"),
+				"request_users": map[string]interface{}{
+					"request_id":       1,
+					"request_name":     true,
+					"request_username": true,
 				},
-			},
+				"style": "success",
+			}},
 		},
 		"resize_keyboard": true,
 		"is_persistent":   true,
 	}
-
 	payload := map[string]interface{}{
 		"chat_id":      chatID,
 		"text":         tr(lang, "share_user_prompt"),
 		"reply_markup": keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendUserShareKeyboard:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func sendMenu(token string, chatID int64, lang, text string) {
@@ -1265,42 +1625,28 @@ func sendMenu(token string, chatID int64, lang, text string) {
 				{"text": tr(lang, "stop_btn"), "callback_data": "stop", "style": "danger"},
 				{"text": tr(lang, "start_btn"), "callback_data": "start", "style": "success"},
 			},
-			{
-				{"text": tr(lang, "edit_text_btn"), "callback_data": "edit_text", "style": "primary"},
-			},
-			// 🆕 زر الوسائط
-			{
-				{"text": tr(lang, "media_reply_btn"), "callback_data": "media_menu", "style": "success"},
-			},
+			{{"text": tr(lang, "edit_text_btn"), "callback_data": "edit_text", "style": "primary"}},
+			{{"text": tr(lang, "media_reply_btn"), "callback_data": "media_menu", "style": "success"}},
+			{{"text": tr(lang, "interaction_menu_btn"), "callback_data": "interaction_menu", "style": "success"}},
+			{{"text": tr(lang, "batch_story_btn"), "callback_data": "batch_story_menu", "style": "success"}},
 			{
 				{"text": tr(lang, "exclude_btn"), "callback_data": "exclude", "style": "primary"},
 				{"text": tr(lang, "list_excluded_btn"), "callback_data": "list_excluded", "style": "primary"},
 			},
-			{
-				{"text": tr(lang, "clear_excluded_btn"), "callback_data": "clear_excluded", "style": "danger"},
-			},
-			{
-				{"text": tr(lang, "profile_menu_btn"), "callback_data": "profile_menu", "style": "primary"},
-			},
-			{
-				{"text": tr(lang, "post_story_btn"), "callback_data": "post_story", "style": "primary"},
-			},
-			{
-				{
-					"text": fmt.Sprintf("%s (%d)", tr(lang, "id_copy_btn"), chatID),
-					"copy_text": map[string]interface{}{
-						"text": fmt.Sprintf("%d", chatID),
-					},
-					"style": "primary",
-				},
-			},
+			{{"text": tr(lang, "clear_excluded_btn"), "callback_data": "clear_excluded", "style": "danger"}},
+			{{"text": tr(lang, "profile_menu_btn"), "callback_data": "profile_menu", "style": "primary"}},
+			{{"text": tr(lang, "post_story_btn"), "callback_data": "post_story", "style": "primary"}},
+			{{
+				"text": fmt.Sprintf("%s (%d)", tr(lang, "id_copy_btn"), chatID),
+				"copy_text": map[string]interface{}{"text": fmt.Sprintf("%d", chatID)},
+				"style":     "primary",
+			}},
 			{
 				{"text": tr(lang, "lang_ar_btn"), "callback_data": "lang_ar", "style": "primary"},
 				{"text": tr(lang, "lang_en_btn"), "callback_data": "lang_en", "style": "primary"},
 			},
 		},
 	}
-
 	payload := map[string]interface{}{
 		"chat_id":      chatID,
 		"text":         text,
@@ -1308,18 +1654,13 @@ func sendMenu(token string, chatID int64, lang, text string) {
 		"reply_markup": keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendMenu:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
-// 🆕 قائمة اختيار نوع الوسائط
 func sendMediaMenu(token string, chatID int64, lang string) {
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{
-				{"text": tr(lang, "media_text_btn"), "callback_data": "media_text", "style": "primary"},
-			},
+			{{"text": tr(lang, "media_text_btn"), "callback_data": "media_text", "style": "primary"}},
 			{
 				{"text": tr(lang, "media_voice_btn"), "callback_data": "media_voice", "style": "primary"},
 				{"text": tr(lang, "media_audio_btn"), "callback_data": "media_audio", "style": "primary"},
@@ -1332,18 +1673,11 @@ func sendMediaMenu(token string, chatID int64, lang string) {
 				{"text": tr(lang, "media_video_btn"), "callback_data": "media_video", "style": "primary"},
 				{"text": tr(lang, "media_photo_btn"), "callback_data": "media_photo", "style": "primary"},
 			},
-			{
-				{"text": tr(lang, "media_preview_btn"), "callback_data": "media_preview", "style": "success"},
-			},
-			{
-				{"text": tr(lang, "media_clear_btn"), "callback_data": "media_clear", "style": "danger"},
-			},
-			{
-				{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"},
-			},
+			{{"text": tr(lang, "media_preview_btn"), "callback_data": "media_preview", "style": "success"}},
+			{{"text": tr(lang, "media_clear_btn"), "callback_data": "media_clear", "style": "danger"}},
+			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"}},
 		},
 	}
-
 	payload := map[string]interface{}{
 		"chat_id":      chatID,
 		"text":         tr(lang, "media_menu_title"),
@@ -1351,12 +1685,55 @@ func sendMediaMenu(token string, chatID int64, lang string) {
 		"reply_markup": keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendMediaMenu:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
-// 🆕 إرسال معاينة للوسائط المحفوظة
+func sendInteractionMenu(token string, chatID int64, lang string, config BotConfig) {
+	storyBtn := tr(lang, "reply_story_mention_btn") + " " + toggleLabel(lang, config.ReplyToStoryMention)
+	reactionBtn := tr(lang, "reply_reaction_btn") + " " + toggleLabel(lang, config.ReplyToReaction)
+	voiceBtn := tr(lang, "reply_voice_btn") + " " + toggleLabel(lang, config.ReplyToVoice)
+
+	keyboard := map[string]interface{}{
+		"inline_keyboard": [][]map[string]interface{}{
+			{{"text": storyBtn, "callback_data": "toggle_story_mention", "style": "primary"}},
+			{{"text": reactionBtn, "callback_data": "toggle_reaction", "style": "primary"}},
+			{{"text": voiceBtn, "callback_data": "toggle_voice", "style": "primary"}},
+			{{"text": "✏️ " + tr(lang, "story_mention_prompt"), "callback_data": "edit_story_reply", "style": "success"}},
+			{{"text": "✏️ " + tr(lang, "reaction_prompt"), "callback_data": "edit_reaction_reply", "style": "success"}},
+			{{"text": "✏️ " + tr(lang, "voice_reply_prompt"), "callback_data": "edit_voice_reply", "style": "success"}},
+			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"}},
+		},
+	}
+	payload := map[string]interface{}{
+		"chat_id":      chatID,
+		"text":         tr(lang, "interaction_menu_title"),
+		"parse_mode":   "Markdown",
+		"reply_markup": keyboard,
+	}
+	b, _ := json.Marshal(payload)
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+}
+
+func sendBatchStoryMenu(token string, chatID int64, lang string, count int) {
+	keyboard := map[string]interface{}{
+		"inline_keyboard": [][]map[string]interface{}{
+			{{"text": tr(lang, "batch_story_add"), "callback_data": "batch_add", "style": "primary"}},
+			{{"text": fmt.Sprintf("%s (%d)", tr(lang, "batch_story_list"), count), "callback_data": "batch_list", "style": "primary"}},
+			{{"text": tr(lang, "batch_story_publish"), "callback_data": "batch_publish", "style": "success"}},
+			{{"text": tr(lang, "batch_story_clear"), "callback_data": "batch_clear", "style": "danger"}},
+			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"}},
+		},
+	}
+	payload := map[string]interface{}{
+		"chat_id":      chatID,
+		"text":         tr(lang, "batch_story_title"),
+		"parse_mode":   "Markdown",
+		"reply_markup": keyboard,
+	}
+	b, _ := json.Marshal(payload)
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+}
+
 func sendPreviewMedia(token string, chatID int64, mediaType, fileID, caption string) {
 	var method, field string
 	switch mediaType {
@@ -1375,23 +1752,14 @@ func sendPreviewMedia(token string, chatID int64, mediaType, fileID, caption str
 	default:
 		return
 	}
-
-	payload := map[string]interface{}{
-		"chat_id": chatID,
-		field:     fileID,
-	}
-
+	payload := map[string]interface{}{"chat_id": chatID, field: fileID}
 	if mediaType != "sticker" && caption != "" {
 		payload["caption"] = caption
 	}
-
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/"+method, "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendPreviewMedia:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/"+method, "application/json", bytes.NewBuffer(b))
 }
 
-// 🆕 إرسال الوسائط كرد تلقائي عبر Business API
 func sendBusinessMediaReply(token string, chatID int64, mediaType, fileID, caption, bizID string) error {
 	var method, field string
 	switch mediaType {
@@ -1410,34 +1778,39 @@ func sendBusinessMediaReply(token string, chatID int64, mediaType, fileID, capti
 	default:
 		return fmt.Errorf("نوع وسائط غير مدعوم: %s", mediaType)
 	}
-
 	payload := map[string]interface{}{
 		"chat_id":                chatID,
 		"business_connection_id": bizID,
 		field:                    fileID,
 	}
-
-	// الملصقات لا تدعم الكابشن
 	if mediaType != "sticker" && caption != "" {
 		payload["caption"] = caption
 		payload["parse_mode"] = "Markdown"
 	}
-
 	b, _ := json.Marshal(payload)
 	resp, err := mediaClient.Post("https://api.telegram.org/bot"+token+"/"+method, "application/json", bytes.NewBuffer(b))
 	if err != nil {
-		return fmt.Errorf("تعذر الاتصال بتليجرام: %v", err)
+		return err
 	}
 	defer resp.Body.Close()
-
 	var res apiResult
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return fmt.Errorf("رد غير متوقع من تليجرام")
+		return err
 	}
 	if !res.Ok {
 		return fmt.Errorf(res.Description)
 	}
 	return nil
+}
+
+func sendBusinessMessage(token string, chatID int64, text, bizID string) {
+	payload := map[string]interface{}{
+		"chat_id":                chatID,
+		"text":                   text,
+		"business_connection_id": bizID,
+	}
+	b, _ := json.Marshal(payload)
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func sendStoryDurationMenu(token string, chatID int64, lang string) {
@@ -1451,12 +1824,9 @@ func sendStoryDurationMenu(token string, chatID int64, lang string) {
 				{"text": "⏱️ " + tr(lang, "dur_24h"), "callback_data": "story_dur_86400", "style": "primary"},
 				{"text": "⏱️ " + tr(lang, "dur_48h"), "callback_data": "story_dur_172800", "style": "primary"},
 			},
-			{
-				{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"},
-			},
+			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"}},
 		},
 	}
-
 	payload := map[string]interface{}{
 		"chat_id":      chatID,
 		"text":         tr(lang, "select_story_duration"),
@@ -1464,9 +1834,7 @@ func sendStoryDurationMenu(token string, chatID int64, lang string) {
 		"reply_markup": keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendStoryDurationMenu:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func sendProfileMenu(token string, chatID int64, lang, text string) {
@@ -1479,7 +1847,6 @@ func sendProfileMenu(token string, chatID int64, lang, text string) {
 			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"}},
 		},
 	}
-
 	payload := map[string]interface{}{
 		"chat_id":      chatID,
 		"text":         text,
@@ -1487,9 +1854,7 @@ func sendProfileMenu(token string, chatID int64, lang, text string) {
 		"reply_markup": keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendProfileMenu:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func sendSubMenu(token string, chatID int64, lang, text string) {
@@ -1498,7 +1863,6 @@ func sendSubMenu(token string, chatID int64, lang, text string) {
 			{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "danger"}},
 		},
 	}
-
 	payload := map[string]interface{}{
 		"chat_id":      chatID,
 		"text":         text,
@@ -1506,9 +1870,7 @@ func sendSubMenu(token string, chatID int64, lang, text string) {
 		"reply_markup": keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendSubMenu:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func sendMessage(token string, chatID int64, text string) {
@@ -1518,20 +1880,16 @@ func sendMessage(token string, chatID int64, text string) {
 		"parse_mode": "Markdown",
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendMessage:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID string) {
 	initialQuote := quotes[rand.Intn(len(quotes))]
-
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
 			{{"text": "✨ " + initialQuote, "callback_data": "change_quote", "style": "primary"}},
 		},
 	}
-
 	payload := map[string]interface{}{
 		"chat_id":                chatID,
 		"text":                   text,
@@ -1539,9 +1897,7 @@ func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID st
 		"reply_markup":           keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ sendBusinessReplyWithQuoteButton:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func updateButtonQuote(token string, chatID int64, msgID int, newQuote string) {
@@ -1550,30 +1906,24 @@ func updateButtonQuote(token string, chatID int64, msgID int, newQuote string) {
 			{{"text": "✨ " + newQuote, "callback_data": "change_quote", "style": "primary"}},
 		},
 	}
-
 	payload := map[string]interface{}{
 		"chat_id":      chatID,
 		"message_id":   msgID,
 		"reply_markup": keyboard,
 	}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/editMessageReplyMarkup", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ updateButtonQuote:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/editMessageReplyMarkup", "application/json", bytes.NewBuffer(b))
 }
 
 func notifyDeveloper(token string, userID int64, firstName, lastName, username string) {
 	devChatID := os.Getenv("DEVELOPER_CHAT_ID")
 	if devChatID == "" {
-		log.Println("تحذير: DEVELOPER_CHAT_ID غير مضبوط، لن يتم إرسال إشعار التفعيل")
 		return
 	}
 	devID, err := strconv.ParseInt(devChatID, 10, 64)
 	if err != nil {
-		log.Println("خطأ: DEVELOPER_CHAT_ID غير صالح:", err)
 		return
 	}
-
 	fullName := firstName
 	if lastName != "" {
 		fullName += " " + lastName
@@ -1581,31 +1931,24 @@ func notifyDeveloper(token string, userID int64, firstName, lastName, username s
 	if fullName == "" {
 		fullName = "غير معروف"
 	}
-
 	usernameLine := "لا يوجد يوزر"
 	if username != "" {
 		usernameLine = "@" + username
 	}
-
 	text := fmt.Sprintf(
 		"🔔 *تفعيل جديد للبوت*\n\n👤 الاسم: %s\n🆔 الايدي: `%d`\n🔗 اليوزر: %s",
 		fullName, userID, usernameLine,
 	)
-
 	sendMessage(token, devID, text)
 }
 
-type apiResult struct {
-	Ok          bool   `json:"ok"`
-	Description string `json:"description"`
-}
+// ============== أدوات الملفات و الرفع ==============
 
 func downloadTelegramFile(token, fileID string) ([]byte, error) {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/getFile?file_id=%s", token, fileID)
 	resp, err := mediaClient.Get(url)
 	if err != nil {
-		log.Println("خطأ getFile:", err)
-		return nil, fmt.Errorf("تعذر الاتصال بتليجرام لجلب الملف")
+		return nil, fmt.Errorf("تعذر الاتصال بتليجرام")
 	}
 	defer resp.Body.Close()
 
@@ -1617,26 +1960,22 @@ func downloadTelegramFile(token, fileID string) ([]byte, error) {
 		Description string `json:"description"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		log.Println("خطأ فك تشفير getFile:", err)
-		return nil, fmt.Errorf("رد غير متوقع عند جلب الملف")
+		return nil, fmt.Errorf("رد غير متوقع")
 	}
 	if !res.Ok || res.Result.FilePath == "" {
-		log.Println("فشل getFile:", res.Description)
 		return nil, fmt.Errorf(res.Description)
 	}
 
 	fileURL := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", token, res.Result.FilePath)
 	fResp, err := mediaClient.Get(fileURL)
 	if err != nil {
-		log.Println("خطأ تنزيل الملف:", err)
-		return nil, fmt.Errorf("تعذر تنزيل الملف من تليجرام")
+		return nil, fmt.Errorf("تعذر تنزيل الملف")
 	}
 	defer fResp.Body.Close()
 
 	data, err := io.ReadAll(fResp.Body)
 	if err != nil {
-		log.Println("خطأ قراءة بيانات الملف:", err)
-		return nil, fmt.Errorf("تعذر قراءة بيانات الملف")
+		return nil, fmt.Errorf("تعذر قراءة البيانات")
 	}
 	return data, nil
 }
@@ -1647,47 +1986,39 @@ func postMultipartBusinessAPI(token, method string, fields map[string]string, fi
 
 	for k, v := range fields {
 		if err := writer.WriteField(k, v); err != nil {
-			log.Println("خطأ تجهيز حقل multipart:", err)
-			return fmt.Errorf("خطأ داخلي في تجهيز الطلب")
+			return fmt.Errorf("خطأ داخلي")
 		}
 	}
 
 	part, err := writer.CreateFormFile(fileFieldName, fileName)
 	if err != nil {
-		log.Println("خطأ إنشاء ملف multipart:", err)
-		return fmt.Errorf("خطأ داخلي في تجهيز الملف")
+		return fmt.Errorf("خطأ داخلي في الملف")
 	}
 	if _, err := part.Write(fileBytes); err != nil {
-		log.Println("خطأ كتابة بيانات الملف:", err)
-		return fmt.Errorf("خطأ داخلي في كتابة الملف")
+		return fmt.Errorf("خطأ كتابة الملف")
 	}
 	if err := writer.Close(); err != nil {
-		log.Println("خطأ إغلاق multipart writer:", err)
-		return fmt.Errorf("خطأ داخلي في إغلاق الطلب")
+		return fmt.Errorf("خطأ إغلاق الطلب")
 	}
 
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/%s", token, method)
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
-		log.Println("خطأ تجهيز الطلب:", err)
-		return fmt.Errorf("تعذر تجهيز طلب الرفع")
+		return fmt.Errorf("تعذر تجهيز الطلب")
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	resp, err := mediaClient.Do(req)
 	if err != nil {
-		log.Println("خطأ استدعاء", method, "(multipart):", err)
 		return fmt.Errorf("تعذر الاتصال بتليجرام")
 	}
 	defer resp.Body.Close()
 
 	var res apiResult
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		log.Println("خطأ فك تشفير رد", method, ":", err)
-		return fmt.Errorf("رد غير متوقع من تليجرام")
+		return fmt.Errorf("رد غير متوقع")
 	}
 	if !res.Ok {
-		log.Println("فشل", method, ":", res.Description)
 		return fmt.Errorf(res.Description)
 	}
 	return nil
@@ -1698,18 +2029,15 @@ func callBusinessAPI(token, method string, payload map[string]interface{}) error
 	b, _ := json.Marshal(payload)
 	resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(b))
 	if err != nil {
-		log.Println("خطأ استدعاء", method, ":", err)
 		return fmt.Errorf("تعذر الاتصال بتليجرام")
 	}
 	defer resp.Body.Close()
 
 	var res apiResult
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		log.Println("خطأ فك تشفير رد", method, ":", err)
-		return fmt.Errorf("رد غير متوقع من تليجرام")
+		return fmt.Errorf("رد غير متوقع")
 	}
 	if !res.Ok {
-		log.Println("فشل", method, ":", res.Description)
 		return fmt.Errorf(res.Description)
 	}
 	return nil
@@ -1747,7 +2075,6 @@ func setBusinessAccountProfilePhoto(token, businessConnID, fileID string) error 
 	if err != nil {
 		return err
 	}
-
 	photoJSON := `{"type":"static","photo":"attach://photo"}`
 	fields := map[string]string{
 		"business_connection_id": businessConnID,
@@ -1756,6 +2083,7 @@ func setBusinessAccountProfilePhoto(token, businessConnID, fileID string) error 
 	return postMultipartBusinessAPI(token, "setBusinessAccountProfilePhoto", fields, "photo", "photo.jpg", data)
 }
 
+// نشر قصة واحدة على الملف الشخصي (post_to_chat_page = true)
 func postBusinessStory(token, businessConnID, mediaType, fileID string, durationSeconds int, activePeriod string, lang string) error {
 	if mediaType == "video" && durationSeconds > 60 {
 		return fmt.Errorf(tr(lang, "video_too_long_error"))
@@ -1787,25 +2115,44 @@ func postBusinessStory(token, businessConnID, mediaType, fileID string, duration
 		"business_connection_id": businessConnID,
 		"content":                contentJSON,
 		"active_period":          activePeriod,
+		"post_to_chat_page":      "true", // 🆕 النشر على الملف الشخصي
 	}
 	return postMultipartBusinessAPI(token, "postStory", fields, "content", fileName, data)
 }
 
+// نشر دفعة ستوريات متسلسلة
+func publishBatchStories(token, businessConnID string, items []StoryItem, lang string) (success, fail int) {
+	for i, item := range items {
+		err := postBusinessStory(
+			token,
+			businessConnID,
+			item.MediaType,
+			item.FileID,
+			item.Duration,
+			item.ActivePeriod,
+			lang,
+		)
+		if err != nil {
+			log.Printf("❌ فشل نشر الستوري %d: %v", i+1, err)
+			fail++
+		} else {
+			log.Printf("✅ تم نشر الستوري %d بنجاح", i+1)
+			success++
+		}
+		// تأخير بين الستوريات لتجنب rate limit
+		time.Sleep(3 * time.Second)
+	}
+	return
+}
+
 func deleteMessage(token string, chatID int64, msgID int) {
-	payload := map[string]interface{}{
-		"chat_id":    chatID,
-		"message_id": msgID,
-	}
+	payload := map[string]interface{}{"chat_id": chatID, "message_id": msgID}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/deleteMessage", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ deleteMessage:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/deleteMessage", "application/json", bytes.NewBuffer(b))
 }
 
 func answerCallback(token, callbackID string) {
 	payload := map[string]string{"callback_query_id": callbackID}
 	b, _ := json.Marshal(payload)
-	if _, err := httpClient.Post("https://api.telegram.org/bot"+token+"/answerCallbackQuery", "application/json", bytes.NewBuffer(b)); err != nil {
-		log.Println("خطأ answerCallback:", err)
-	}
+	httpClient.Post("https://api.telegram.org/bot"+token+"/answerCallbackQuery", "application/json", bytes.NewBuffer(b))
 }
