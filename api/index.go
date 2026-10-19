@@ -605,6 +605,30 @@ type apiResult struct {
 	Description string `json:"description"`
 }
 
+func postTelegramJSON(token, method string, payload interface{}) (apiResult, error) {
+	var result apiResult
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return result, fmt.Errorf("تعذر تجهيز طلب Telegram")
+	}
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/%s", token, method)
+	resp, err := httpClient.Post(apiURL, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return result, fmt.Errorf("تعذر الاتصال بتليجرام")
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return result, fmt.Errorf("تعذر قراءة استجابة Telegram")
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
+		if result.Description == "" {
+			result.Description = "استجابة غير ناجحة"
+		}
+		return result, fmt.Errorf("فشل طلب Telegram (HTTP %d): %s", resp.StatusCode, result.Description)
+	}
+	return result, nil
+}
+
 // ============== Handler الرئيسي ==============
 
 func Handler(w http.ResponseWriter, r *http.Request) {
@@ -1713,8 +1737,9 @@ func sendNerdBotInfo(token string, chatID int64) {
 		},
 	}
 	payload := map[string]interface{}{"chat_id": chatID, "text": text, "reply_markup": keyboard}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+		log.Printf("فشل إرسال رسالة Telegram: %v", err)
+	}
 }
 
 func sendNerdBotInfoBusiness(token string, chatID int64, bizID string) {
@@ -1730,14 +1755,16 @@ func sendNerdBotInfoBusiness(token string, chatID int64, bizID string) {
 		"business_connection_id": bizID,
 		"reply_markup":           keyboard,
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+		log.Printf("فشل إرسال رسالة Telegram: %v", err)
+	}
 }
 
 func sendStartPhoto(token string, chatID int64, lang string) {
 	payload := map[string]interface{}{"chat_id": chatID, "photo": startPhotoURL, "caption": tr(lang, "welcome")}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendPhoto", "application/json", bytes.NewBuffer(b))
+	if _, err := postTelegramJSON(token, "sendPhoto", payload); err != nil {
+		log.Printf("فشل إرسال صورة Telegram: %v", err)
+	}
 }
 
 func sendUserShareKeyboard(token string, chatID int64, lang string) {
@@ -1761,8 +1788,9 @@ func sendUserShareKeyboard(token string, chatID int64, lang string) {
 		"text":         tr(lang, "share_user_prompt"),
 		"reply_markup": keyboard,
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+		log.Printf("فشل إرسال رسالة Telegram: %v", err)
+	}
 }
 
 func sendMenu(token string, chatID int64, lang, text string) {
@@ -1800,8 +1828,9 @@ func sendMenu(token string, chatID int64, lang, text string) {
 		"parse_mode":   "Markdown",
 		"reply_markup": keyboard,
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+		log.Printf("فشل إرسال رسالة Telegram: %v", err)
+	}
 }
 
 func sendMediaMenu(token string, chatID int64, lang string) {
@@ -1831,8 +1860,9 @@ func sendMediaMenu(token string, chatID int64, lang string) {
 		"parse_mode":   "Markdown",
 		"reply_markup": keyboard,
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+		log.Printf("فشل إرسال رسالة Telegram: %v", err)
+	}
 }
 
 func sendInteractionMenu(token string, chatID int64, lang string, config BotConfig) {
@@ -1857,8 +1887,9 @@ func sendInteractionMenu(token string, chatID int64, lang string, config BotConf
 		"parse_mode":   "Markdown",
 		"reply_markup": keyboard,
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+		log.Printf("فشل إرسال رسالة Telegram: %v", err)
+	}
 }
 
 func sendBatchStoryMenu(token string, chatID int64, lang string, count int) {
@@ -1877,8 +1908,9 @@ func sendBatchStoryMenu(token string, chatID int64, lang string, count int) {
 		"parse_mode":   "Markdown",
 		"reply_markup": keyboard,
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+		log.Printf("فشل إرسال رسالة Telegram: %v", err)
+	}
 }
 
 func sendPreviewMedia(token string, chatID int64, mediaType, fileID, caption string) {
@@ -1997,8 +2029,9 @@ func sendStoryDurationMenu(token string, chatID int64, lang string) {
 		"parse_mode":   "Markdown",
 		"reply_markup": keyboard,
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+		log.Printf("فشل إرسال رسالة Telegram: %v", err)
+	}
 }
 
 func sendProfileMenu(token string, chatID int64, lang, text string) {
@@ -2017,8 +2050,9 @@ func sendProfileMenu(token string, chatID int64, lang, text string) {
 		"parse_mode":   "Markdown",
 		"reply_markup": keyboard,
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+		log.Printf("فشل إرسال رسالة Telegram: %v", err)
+	}
 }
 
 func sendSubMenu(token string, chatID int64, lang, text string) {
@@ -2033,8 +2067,9 @@ func sendSubMenu(token string, chatID int64, lang, text string) {
 		"parse_mode":   "Markdown",
 		"reply_markup": keyboard,
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+		log.Printf("فشل إرسال رسالة Telegram: %v", err)
+	}
 }
 
 
