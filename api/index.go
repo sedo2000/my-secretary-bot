@@ -31,10 +31,6 @@ var (
 	bizCacheMu sync.Mutex
 	bizCache   = make(map[string]int64)
 
-	// معاينات الردود المؤقتة؛ التخزين في الذاكرة متعمد حسب إعداد المستخدم.
-	pendingReplyPreviewMu sync.Mutex
-	pendingReplyPreviews  = make(map[int64]string)
-
 	// 🆕 تخزين قائمة الستوريات في الذاكرة (لتجاوز حد 4096 حرف)
 	storyBatchMu sync.Mutex
 	storyBatch   = make(map[int64][]StoryItem)
@@ -421,6 +417,7 @@ type BotConfig struct {
 	StoryMentionReply   string `json:"story_mention_reply"`
 	ReactionReply       string `json:"reaction_reply"`
 	VoiceReply          string `json:"voice_reply"`
+	PendingReplyPreview string `json:"pending_reply_preview,omitempty"`
 }
 
 // 🆕 عنصر ستوري
@@ -665,18 +662,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		switch cb.Data {
 		case "reply_preview_confirm":
-			pendingReplyPreviewMu.Lock()
-			pendingText, exists := pendingReplyPreviews[adminID]
-			if exists {
-				delete(pendingReplyPreviews, adminID)
-			}
-			pendingReplyPreviewMu.Unlock()
-
-			if !exists {
+			if config.PendingReplyPreview == "" || config.State != "waiting_text_preview" {
 				sendMenu(botToken, adminID, lang, "انتهت صلاحية المعاينة. أرسل النص من جديد.")
 				break
 			}
-			config.AutoReply = pendingText
+			config.AutoReply = config.PendingReplyPreview
+			config.PendingReplyPreview = ""
 			config.ReplyType = "text"
 			config.ReplyFileID = ""
 			config.ReplyCaption = ""
@@ -685,9 +676,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			sendMenu(botToken, adminID, lang, tr(lang, "saved_text_msg"))
 
 		case "reply_preview_cancel":
-			pendingReplyPreviewMu.Lock()
-			delete(pendingReplyPreviews, adminID)
-			pendingReplyPreviewMu.Unlock()
+			config.PendingReplyPreview = ""
 			config.State = ""
 			saveConfig(botToken, adminID, config, msgID)
 			sendMenu(botToken, adminID, lang, "تم إلغاء المعاينة، ولم يتغير الرد المحفوظ.")
@@ -708,6 +697,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			sendMenu(botToken, adminID, lang, tr(lang, "started_msg"))
 		case "edit_text":
 			// لا تغيّر الرد النشط عند بدء التحرير؛ احفظ حالة الانتظار فقط.
+			config.PendingReplyPreview = ""
 			config.State = "waiting_text"
 			saveConfig(botToken, adminID, config, msgID)
 			sendSubMenu(botToken, adminID, lang, tr(lang, "edit_text_prompt"))
@@ -1130,10 +1120,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				return
 			}
-			pendingReplyPreviewMu.Lock()
-			pendingReplyPreviews[chatID] = msg.Text
-			pendingReplyPreviewMu.Unlock()
-
+			config.PendingReplyPreview = msg.Text
 			config.State = "waiting_text_preview"
 			saveConfig(botToken, chatID, config, msgID)
 			sendReplyPreview(botToken, chatID, msg.Text, lang)
