@@ -423,6 +423,8 @@ type BotConfig struct {
 	PendingSmartChatID         int64  `json:"pending_smart_chat_id,omitempty"`
 	PendingSmartBusinessConnID string `json:"pending_smart_business_conn_id,omitempty"`
 	PendingSmartCustomerName   string `json:"pending_smart_customer_name,omitempty"`
+	SubscriptionUntil           int64    `json:"subscription_until,omitempty"`
+	ProcessedStarChargeIDs      []string `json:"processed_star_charge_ids,omitempty"`
 }
 
 // 🆕 عنصر ستوري
@@ -437,6 +439,7 @@ type StoryItem struct {
 type TelegramUpdate struct {
 	Message               *Message         `json:"message"`
 	CallbackQuery          *CallbackQuery   `json:"callback_query"`
+	PreCheckoutQuery       *PreCheckoutQuery `json:"pre_checkout_query"`
 	BusinessMessage       *BusinessMessage `json:"business_message"`
 	EditedBusinessMessage *BusinessMessage `json:"edited_business_message"`
 	DeletedBusinessMessages *struct {
@@ -577,6 +580,7 @@ type Message struct {
 	} `json:"from"`
 	Text        string           `json:"text"`
 	Caption     string           `json:"caption"`
+	SuccessfulPayment *SuccessfulPayment `json:"successful_payment"`
 	Photo       []PhotoSize      `json:"photo"`
 	Video       *Video           `json:"video"`
 	Voice       *Voice           `json:"voice"`
@@ -585,6 +589,21 @@ type Message struct {
 	Sticker     *Sticker         `json:"sticker"`
 	Document    *Document        `json:"document"`
 	UsersShared *UsersSharedData `json:"users_shared"`
+}
+
+type SuccessfulPayment struct {
+	Currency                string `json:"currency"`
+	TotalAmount             int    `json:"total_amount"`
+	InvoicePayload          string `json:"invoice_payload"`
+	TelegramPaymentChargeID string `json:"telegram_payment_charge_id"`
+}
+
+type PreCheckoutQuery struct {
+	ID             string `json:"id"`
+	From           struct { ID int64 `json:"id"` } `json:"from"`
+	Currency       string `json:"currency"`
+	TotalAmount    int    `json:"total_amount"`
+	InvoicePayload string `json:"invoice_payload"`
 }
 
 type CallbackQuery struct {
@@ -683,6 +702,30 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// لا يمكن الوثوق بتحديثات الدفع إذا لم يكن webhook محميًا برمز سرّي.
+	// بدون هذا الشرط يستطيع طرف خارجي تزوير successful_payment وإعطاء اشتراك مجاني.
+	paymentEvent := update.PreCheckoutQuery != nil || (update.Message != nil && update.Message.SuccessfulPayment != nil)
+	if paymentEvent && strings.TrimSpace(os.Getenv("TELEGRAM_WEBHOOK_SECRET")) == "" {
+		log.Println("رفض تحديث دفع لأن TELEGRAM_WEBHOOK_SECRET غير مضبوط")
+		http.Error(w, "payment webhook secret is required", http.StatusServiceUnavailable)
+		return
+	}
+
+	// تأكيد طلب الدفع المسبق خلال المهلة التي يفرضها Telegram.
+	if update.PreCheckoutQuery != nil {
+		q := update.PreCheckoutQuery
+		valid := q.ID != "" && validStarsCheckout(q.From.ID, q.Currency, q.TotalAmount, q.InvoicePayload)
+		payload := map[string]interface{}{"pre_checkout_query_id": q.ID, "ok": valid}
+		if !valid {
+			payload["error_message"] = "تعذر التحقق من الباقة. ارجع إلى Nerd واختر الباقة من جديد."
+		}
+		if _, err := postTelegramJSON(botToken, "answerPreCheckoutQuery", payload); err != nil {
+			log.Printf("تعذر الرد على pre_checkout_query: %v", err)
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	// حسب الإعداد المعتمد: تجاهل تعديلات الرسائل وحذفها تماماً،
 	// ولا تمريرها إلى مسار الرد التلقائي العادي.
 	if update.EditedBusinessMessage != nil || update.DeletedBusinessMessages != nil {
@@ -707,21 +750,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if cb.Data == "check_subscription" {
-			subscribed, subErr := isUserSubscribed(botToken, cb.From.ID)
-			if subErr != nil {
-				sendSubscriptionGate(botToken, cb.Message.Chat.ID, subErr.Error())
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-			if !subscribed {
-				sendSubscriptionGate(botToken, cb.Message.Chat.ID, "")
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-			cfg, cfgMsgID := getConfig(botToken, cb.From.ID)
-			if cfgMsgID >= 0 {
-				sendMenu(botToken, cb.From.ID, cfg.Lang, "✅ تم التحقق من اشتراكك. أهلاً بك في Nerd.")
-			}
+			sendSubscriptionMenu(botToken, cb.From.ID, "تحقق الاشتراك أصبح عبر باقات Stars المدفوعة.")
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -730,21 +759,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		subscribed, subErr := isUserSubscribed(botToken, cb.From.ID)
-		if subErr != nil {
-			sendSubscriptionGate(botToken, cb.Message.Chat.ID, subErr.Error())
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		if !subscribed {
-			sendSubscriptionGate(botToken, cb.Message.Chat.ID, "")
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
 		adminID := cb.From.ID
 		config, msgID := getConfig(botToken, adminID)
 		if msgID < 0 {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if !subscriptionActive(config) && !isSubscriptionCallback(cb.Data) {
+			sendSubscriptionMenu(botToken, adminID, "🔒 ميزات الإدارة متاحة للمشتركين فقط.")
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -755,6 +777,20 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		lang := config.Lang
 
 		switch cb.Data {
+		case "plans":
+			sendSubscriptionMenu(botToken, adminID, "")
+		case "subscription_status":
+			sendSubscriptionStatus(botToken, adminID, config)
+		case "buy_14", "buy_30", "buy_180":
+			days, ok := planDaysForCallback(cb.Data)
+			if !ok {
+				sendSubscriptionMenu(botToken, adminID, "الباقة غير معروفة.")
+				break
+			}
+			if err := sendStarsInvoice(botToken, adminID, days); err != nil {
+				sendSubscriptionMenu(botToken, adminID, "تعذر إنشاء فاتورة Stars الآن. حاول مرة أخرى لاحقًا.")
+				log.Printf("تعذر إنشاء فاتورة Stars للمستخدم %d: %v", adminID, err)
+			}
 		case "activation_guide":
 			sendActivationGuide(botToken, adminID, lang)
 
@@ -1148,26 +1184,46 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		msg := update.Message
 		chatID := msg.Chat.ID
 
-		if msg.Chat.Type == "private" {
-			subscribed, subErr := isUserSubscribed(botToken, msg.From.ID)
-			if subErr != nil {
-				sendSubscriptionGate(botToken, chatID, subErr.Error())
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-			if !subscribed {
-				sendSubscriptionGate(botToken, chatID, "")
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-		}
-
 		config, msgID := getConfig(botToken, chatID)
 		if msgID < 0 {
+			if msg.SuccessfulPayment != nil {
+				sendMessage(botToken, chatID, "⚠️ وصل تحديث الدفع لكن تعذر قراءة إعدادات الاشتراك. احتفظ بإيصال الدفع وتواصل مع الدعم؛ لا تعاود الدفع الآن.")
+			}
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 		lang := config.Lang
+
+		// Telegram sends successful_payment only after the charge is confirmed.
+		if msg.SuccessfulPayment != nil {
+			if err := applySuccessfulStarsPayment(botToken, chatID, msg.SuccessfulPayment, &config, msgID); err != nil {
+				log.Printf("تعذر تسجيل دفع Stars للمستخدم %d: %v", chatID, err)
+				sendMessage(botToken, chatID, "⚠️ وصل تأكيد الدفع لكن تعذر حفظ الاشتراك تلقائيًا. احتفظ بإيصال الدفع وتواصل مع الدعم؛ لا تعاود الدفع الآن.")
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if msg.Text == "/plans" {
+			sendSubscriptionMenu(botToken, chatID, "")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if msg.Text == "/mysubscription" {
+			sendSubscriptionStatus(botToken, chatID, config)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if msg.Text == "/paysupport" {
+			sendMessage(botToken, chatID, "للدعم بشأن الدفع، أرسل رسالة إلى مسؤول Nerd مع إيصال Telegram Stars ومعرّف العملية. لا ترسل رموز تسجيل الدخول أو بيانات حساسة.")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if !subscriptionActive(config) && msg.Text != "/start" {
+			sendSubscriptionMenu(botToken, chatID, "🔒 انتهى اشتراكك أو لم تشترك بعد. اختر باقة لتفعيل ميزات الإدارة.")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 
 		if strings.TrimSpace(msg.Text) == "بوت" || strings.Contains(msg.Text, "بوت") {
 			sendNerdBotInfo(botToken, chatID)
@@ -1192,8 +1248,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		if msg.Text == "/start" {
 			sendStartPhoto(botToken, chatID, lang)
-			sendMenu(botToken, chatID, lang, tr(lang, "main_menu_title"))
-			sendUserShareKeyboard(botToken, chatID, lang)
+			if subscriptionActive(config) {
+				sendMenu(botToken, chatID, lang, tr(lang, "main_menu_title"))
+				sendUserShareKeyboard(botToken, chatID, lang)
+			} else {
+				sendSubscriptionMenu(botToken, chatID, "ابدأ باختيار باقة لتفعيل ميزات Nerd.")
+			}
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -1468,6 +1528,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		config, configMsgID := getConfig(botToken, adminID)
 		if configMsgID < 0 {
 			// لا نرسل رداً تلقائياً اعتماداً على إعدادات افتراضية عند تعذر القراءة.
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if !subscriptionActive(config) {
+			// أوقف كل أتمتة Business عند غياب الاشتراك أو انتهائه.
 			w.WriteHeader(http.StatusOK)
 			return
 		}
