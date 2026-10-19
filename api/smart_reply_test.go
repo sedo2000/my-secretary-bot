@@ -26,8 +26,12 @@ func TestIsMemberStatus(t *testing.T) {
 	}
 }
 
-func TestForcedSubscriptionChannelDefault(t *testing.T) {
+func TestForcedSubscriptionChannelRequiresConfiguration(t *testing.T) {
 	t.Setenv("FORCE_SUBSCRIPTION_CHANNEL", "")
+	if got := forcedSubscriptionChannel(); got != "" {
+		t.Fatalf("forcedSubscriptionChannel() = %q, want empty until configured", got)
+	}
+	t.Setenv("FORCE_SUBSCRIPTION_CHANNEL", "@slf00")
 	if got := forcedSubscriptionChannel(); got != "@slf00" {
 		t.Fatalf("forcedSubscriptionChannel() = %q, want @slf00", got)
 	}
