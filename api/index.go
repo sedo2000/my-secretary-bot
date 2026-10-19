@@ -1392,17 +1392,18 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		// الرد النصي
 		var replyText string
+		safeCustomerName := escapeMarkdownV1(customerName)
 		if strings.TrimSpace(msg.Text) == "" {
-			replyText = "شكراً لتواصلك يا " + customerName + " 🌸\nاستلمت رسالتك وسأرد عليك قريباً."
+			replyText = "شكراً لتواصلك يا " + safeCustomerName + " 🌸\nاستلمت رسالتك وسأرد عليك قريباً."
 		} else if config.AutoReply == "" {
-			replyText = "أهلاً بك يا " + customerName + " 🌸\nأنا غير متوفر الآن، اترك رسالتك وسأرد عليك قريباً."
+			replyText = "أهلاً بك يا " + safeCustomerName + " 🌸\nأنا غير متوفر الآن، اترك رسالتك وسأرد عليك قريباً."
 		} else if strings.Contains(config.AutoReply, "{name}") || strings.Contains(config.AutoReply, "{الاسم}") || strings.Contains(config.AutoReply, "$name") {
 			replyText = config.AutoReply
-			replyText = strings.ReplaceAll(replyText, "{name}", customerName)
-			replyText = strings.ReplaceAll(replyText, "{الاسم}", customerName)
-			replyText = strings.ReplaceAll(replyText, "$name", customerName)
+			replyText = strings.ReplaceAll(replyText, "{name}", safeCustomerName)
+			replyText = strings.ReplaceAll(replyText, "{الاسم}", safeCustomerName)
+			replyText = strings.ReplaceAll(replyText, "$name", safeCustomerName)
 		} else {
-			replyText = "أهلاً بك يا " + customerName + " 🌸\n" + config.AutoReply
+			replyText = "أهلاً بك يا " + safeCustomerName + " 🌸\n" + config.AutoReply
 		}
 
 		if detectedLang != "" && detectedLang != "ar" {
@@ -2116,24 +2117,12 @@ func sendMessage(token string, chatID int64, text string) {
 		"text":       text,
 		"parse_mode": "Markdown",
 	}
-	b, err := json.Marshal(payload)
-	if err != nil {
-		log.Println("تعذر تجهيز sendMessage:", err)
-		return
-	}
-	resp, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
-	if err != nil {
-		log.Println("تعذر إرسال sendMessage:", err)
-		return
-	}
-	defer resp.Body.Close()
-	var result apiResult
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Println("تعذر قراءة استجابة sendMessage")
-		return
-	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
-		log.Printf("فشل sendMessage (HTTP %d): %s", resp.StatusCode, result.Description)
+	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+		// بعض النصوص الديناميكية قد تكسر Markdown؛ أعد الإرسال كنص عادي.
+		delete(payload, "parse_mode")
+		if _, retryErr := postTelegramJSON(token, "sendMessage", payload); retryErr != nil {
+			log.Printf("فشل sendMessage بعد إعادة المحاولة كنص عادي: %v", retryErr)
+		}
 	}
 }
 
@@ -2145,6 +2134,9 @@ func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID st
 			"text":                   chunk,
 			"business_connection_id": bizID,
 		}
+		if len(chunks) == 1 {
+			payload["parse_mode"] = "Markdown"
+		}
 		if i == len(chunks)-1 {
 			initialQuote := quotes[rand.Intn(len(quotes))]
 			payload["reply_markup"] = map[string]interface{}{
@@ -2154,10 +2146,30 @@ func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID st
 			}
 		}
 		if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+			if len(chunks) == 1 {
+				delete(payload, "parse_mode")
+				if _, retryErr := postTelegramJSON(token, "sendMessage", payload); retryErr == nil {
+					continue
+				} else {
+					log.Printf("فشل إرسال الرد التلقائي حتى بعد تعطيل التنسيق: %v", retryErr)
+					return
+				}
+			}
 			log.Printf("فشل إرسال جزء من الرد التلقائي: %v", err)
 			return
 		}
 	}
+}
+
+func escapeMarkdownV1(value string) string {
+	replacer := strings.NewReplacer(
+		"\\", "\\\\",
+		"_", "\\_",
+		"*", "\\*",
+		"`", "\\`",
+		"[", "\\[",
+	)
+	return replacer.Replace(value)
 }
 
 func splitTelegramText(text string, limit int) []string {
