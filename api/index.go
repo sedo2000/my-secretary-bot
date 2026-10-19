@@ -1177,6 +1177,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		config, msgID := getConfig(botToken, chatID)
 		if msgID < 0 {
+			if msg.SuccessfulPayment != nil {
+				sendMessage(botToken, chatID, "⚠️ وصل تحديث الدفع لكن تعذر قراءة إعدادات الاشتراك. احتفظ بإيصال الدفع وتواصل مع الدعم؛ لا تعاود الدفع الآن.")
+			}
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -1199,6 +1202,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 		if msg.Text == "/mysubscription" {
 			sendSubscriptionStatus(botToken, chatID, config)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if msg.Text == "/paysupport" {
+			sendMessage(botToken, chatID, "للدعم بشأن الدفع، أرسل رسالة إلى مسؤول Nerd مع إيصال Telegram Stars ومعرّف العملية. لا ترسل رموز تسجيل الدخول أو بيانات حساسة.")
 			w.WriteHeader(http.StatusOK)
 			return
 		}
