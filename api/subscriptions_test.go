@@ -57,3 +57,20 @@ func TestValidStarsCheckout(t *testing.T) {
 		}
 	}
 }
+
+func TestOwnerTelegramID(t *testing.T) {
+	t.Setenv("OWNER_TELEGRAM_ID", "123456789")
+	if got := ownerTelegramID(); got != 123456789 {
+		t.Fatalf("ownerTelegramID() = %d, want 123456789", got)
+	}
+	if !isOwnerTelegramID(123456789) {
+		t.Fatal("configured owner should be recognized")
+	}
+	if isOwnerTelegramID(987654321) {
+		t.Fatal("another user must not be recognized as owner")
+	}
+	t.Setenv("OWNER_TELEGRAM_ID", "not-a-number")
+	if got := ownerTelegramID(); got != 0 {
+		t.Fatalf("invalid owner ID should be disabled, got %d", got)
+	}
+}

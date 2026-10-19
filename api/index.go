@@ -425,6 +425,7 @@ type BotConfig struct {
 	PendingSmartCustomerName   string `json:"pending_smart_customer_name,omitempty"`
 	SubscriptionUntil           int64    `json:"subscription_until,omitempty"`
 	ProcessedStarChargeIDs      []string `json:"processed_star_charge_ids,omitempty"`
+	ExemptedSubscriptionIDs     []int64  `json:"exempted_subscription_ids,omitempty"`
 }
 
 // 🆕 عنصر ستوري
@@ -765,7 +766,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		if !subscriptionActive(config) && !isSubscriptionCallback(cb.Data) {
+		if !hasPremiumAccess(botToken, adminID, config) && !isSubscriptionCallback(cb.Data) {
 			sendSubscriptionMenu(botToken, adminID, "🔒 ميزات الإدارة متاحة للمشتركين فقط.")
 			w.WriteHeader(http.StatusOK)
 			return
@@ -777,6 +778,17 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		lang := config.Lang
 
 		switch cb.Data {
+		case "manage_subscription_exemptions":
+			if !isOwnerTelegramID(adminID) {
+				sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط.")
+				break
+			}
+			config.State = "waiting_subscription_exempt_id"
+			if !saveConfig(botToken, adminID, config, msgID) {
+				sendMessage(botToken, adminID, "تعذر حفظ الحالة. حاول مجددًا.")
+				break
+			}
+			sendMessage(botToken, adminID, "👑 أرسل الآن Telegram user ID للشخص الذي تريد إعفاءه من الاشتراك. أرسل أرقامًا فقط.")
 		case "plans":
 			sendSubscriptionMenu(botToken, adminID, "")
 		case "subscription_status":
@@ -1219,7 +1231,31 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		if !subscriptionActive(config) && msg.Text != "/start" {
+		if config.State == "waiting_subscription_exempt_id" && isOwnerTelegramID(msg.From.ID) && msg.Chat.Type == "private" {
+			idText := strings.TrimSpace(msg.Text)
+			targetID, parseErr := strconv.ParseInt(idText, 10, 64)
+			if parseErr != nil || targetID <= 0 {
+				sendMessage(botToken, chatID, "❌ المعرّف غير صحيح. أرسل Telegram user ID موجبًا مكوّنًا من أرقام فقط.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			found := false
+			for _, existingID := range config.ExemptedSubscriptionIDs {
+				if existingID == targetID { found = true; break }
+			}
+			config.State = ""
+			if !found { config.ExemptedSubscriptionIDs = append(config.ExemptedSubscriptionIDs, targetID) }
+			if !saveConfig(botToken, chatID, config, msgID) {
+				sendMessage(botToken, chatID, "⚠️ تعذر حفظ الإعفاء. لم يتم تأكيد التغيير؛ حاول مرة أخرى.")
+			} else if found {
+				sendMessage(botToken, chatID, fmt.Sprintf("ℹ️ الحساب `%d` معفى بالفعل من الاشتراك.", targetID))
+			} else {
+				sendMessage(botToken, chatID, fmt.Sprintf("✅ تم إعفاء الحساب `%d` من الاشتراك. سيحصل على ميزات Nerd دون شراء باقة.", targetID))
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if !hasPremiumAccess(botToken, msg.From.ID, config) && msg.Text != "/start" {
 			sendSubscriptionMenu(botToken, chatID, "🔒 انتهى اشتراكك أو لم تشترك بعد. اختر باقة لتفعيل ميزات الإدارة.")
 			w.WriteHeader(http.StatusOK)
 			return
@@ -1248,7 +1284,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		if msg.Text == "/start" {
 			sendStartPhoto(botToken, chatID, lang)
-			if subscriptionActive(config) {
+			if hasPremiumAccess(botToken, msg.From.ID, config) {
 				sendMenu(botToken, chatID, lang, tr(lang, "main_menu_title"))
 				sendUserShareKeyboard(botToken, chatID, lang)
 			} else {
@@ -1531,7 +1567,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		if !subscriptionActive(config) {
+		if !hasPremiumAccess(botToken, adminID, config) {
 			// أوقف كل أتمتة Business عند غياب الاشتراك أو انتهائه.
 			w.WriteHeader(http.StatusOK)
 			return
@@ -2118,6 +2154,11 @@ func sendMenu(token string, chatID int64, lang, text string) {
 			},
 		},
 	}
+	if isOwnerTelegramID(chatID) {
+		rows := keyboard["inline_keyboard"].([][]map[string]interface{})
+		keyboard["inline_keyboard"] = append(rows, []map[string]interface{}{{"text": "👑 إعفاء مستخدم من الاشتراك", "callback_data": "manage_subscription_exemptions", "style": "primary"}})
+	}
+
 	payload := map[string]interface{}{
 		"chat_id":      chatID,
 		"text":         text,
