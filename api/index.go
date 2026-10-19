@@ -702,10 +702,19 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// لا يمكن الوثوق بتحديثات الدفع إذا لم يكن webhook محميًا برمز سرّي.
+	// بدون هذا الشرط يستطيع طرف خارجي تزوير successful_payment وإعطاء اشتراك مجاني.
+	paymentEvent := update.PreCheckoutQuery != nil || (update.Message != nil && update.Message.SuccessfulPayment != nil)
+	if paymentEvent && strings.TrimSpace(os.Getenv("TELEGRAM_WEBHOOK_SECRET")) == "" {
+		log.Println("رفض تحديث دفع لأن TELEGRAM_WEBHOOK_SECRET غير مضبوط")
+		http.Error(w, "payment webhook secret is required", http.StatusServiceUnavailable)
+		return
+	}
+
 	// تأكيد طلب الدفع المسبق خلال المهلة التي يفرضها Telegram.
 	if update.PreCheckoutQuery != nil {
 		q := update.PreCheckoutQuery
-		valid := validStarsCheckout(q.From.ID, q.Currency, q.TotalAmount, q.InvoicePayload)
+		valid := q.ID != "" && validStarsCheckout(q.From.ID, q.Currency, q.TotalAmount, q.InvoicePayload)
 		payload := map[string]interface{}{"pre_checkout_query_id": q.ID, "ok": valid}
 		if !valid {
 			payload["error_message"] = "تعذر التحقق من الباقة. ارجع إلى Nerd واختر الباقة من جديد."
