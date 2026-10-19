@@ -2092,8 +2092,25 @@ func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID st
 		"business_connection_id": bizID,
 		"reply_markup":           keyboard,
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	b, err := json.Marshal(payload)
+	if err != nil {
+		log.Println("تعذر تجهيز الرد التلقائي:", err)
+		return
+	}
+	resp, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if err != nil {
+		log.Println("تعذر إرسال الرد التلقائي:", err)
+		return
+	}
+	defer resp.Body.Close()
+	var result apiResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Println("تعذر قراءة استجابة الرد التلقائي")
+		return
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
+		log.Printf("فشل إرسال الرد التلقائي (HTTP %d): %s", resp.StatusCode, result.Description)
+	}
 }
 
 func updateButtonQuote(token string, chatID int64, msgID int, newQuote string) {
@@ -2107,8 +2124,25 @@ func updateButtonQuote(token string, chatID int64, msgID int, newQuote string) {
 		"message_id":   msgID,
 		"reply_markup": keyboard,
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/editMessageReplyMarkup", "application/json", bytes.NewBuffer(b))
+	b, err := json.Marshal(payload)
+	if err != nil {
+		log.Println("تعذر تجهيز تحديث زر الاقتباس:", err)
+		return
+	}
+	resp, err := httpClient.Post("https://api.telegram.org/bot"+token+"/editMessageReplyMarkup", "application/json", bytes.NewBuffer(b))
+	if err != nil {
+		log.Println("تعذر تحديث زر الاقتباس:", err)
+		return
+	}
+	defer resp.Body.Close()
+	var result apiResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Println("تعذر قراءة استجابة تحديث زر الاقتباس")
+		return
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
+		log.Printf("فشل تحديث زر الاقتباس (HTTP %d): %s", resp.StatusCode, result.Description)
+	}
 }
 
 func notifyDeveloper(token string, userID int64, firstName, lastName, username string) {
