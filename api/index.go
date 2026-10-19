@@ -31,6 +31,10 @@ var (
 	bizCacheMu sync.Mutex
 	bizCache   = make(map[string]int64)
 
+	// معاينات الردود المؤقتة؛ التخزين في الذاكرة متعمد حسب إعداد المستخدم.
+	pendingReplyPreviewMu sync.Mutex
+	pendingReplyPreviews  = make(map[int64]string)
+
 	// 🆕 تخزين قائمة الستوريات في الذاكرة (لتجاوز حد 4096 حرف)
 	storyBatchMu sync.Mutex
 	storyBatch   = make(map[int64][]StoryItem)
@@ -429,9 +433,17 @@ type StoryItem struct {
 }
 
 type TelegramUpdate struct {
-	Message            *Message       `json:"message"`
-	CallbackQuery      *CallbackQuery `json:"callback_query"`
-	BusinessMessage    *BusinessMessage `json:"business_message"`
+	Message               *Message         `json:"message"`
+	CallbackQuery          *CallbackQuery   `json:"callback_query"`
+	BusinessMessage       *BusinessMessage `json:"business_message"`
+	EditedBusinessMessage *BusinessMessage `json:"edited_business_message"`
+	DeletedBusinessMessages *struct {
+		BusinessConnectionID string  `json:"business_connection_id"`
+		Chat                 struct {
+			ID int64 `json:"id"`
+		} `json:"chat"`
+		MessageIDs []int `json:"message_ids"`
+	} `json:"deleted_business_messages"`
 	BusinessConnection *struct {
 		ID   string `json:"id"`
 		User struct {
@@ -599,9 +611,15 @@ type apiResult struct {
 // ============== Handler الرئيسي ==============
 
 func Handler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if botToken == "" {
-		w.WriteHeader(http.StatusOK)
+		http.Error(w, "bot is not configured", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -614,8 +632,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var update TelegramUpdate
-	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
-		log.Println("خطأ في قراءة التحديث:", err)
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err := decoder.Decode(&update); err != nil {
+		log.Println("خطأ في قراءة تحديث Telegram (JSON غير صالح أو أكبر من الحد)")
+		http.Error(w, "invalid update payload", http.StatusBadRequest)
+		return
+	}
+
+	// حسب الإعداد المعتمد: تجاهل تعديلات الرسائل وحذفها تماماً،
+	// ولا تمريرها إلى مسار الرد التلقائي العادي.
+	if update.EditedBusinessMessage != nil || update.DeletedBusinessMessages != nil {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -638,6 +664,34 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		lang := config.Lang
 
 		switch cb.Data {
+		case "reply_preview_confirm":
+			pendingReplyPreviewMu.Lock()
+			pendingText, exists := pendingReplyPreviews[adminID]
+			if exists {
+				delete(pendingReplyPreviews, adminID)
+			}
+			pendingReplyPreviewMu.Unlock()
+
+			if !exists {
+				sendMenu(botToken, adminID, lang, "انتهت صلاحية المعاينة. أرسل النص من جديد.")
+				break
+			}
+			config.AutoReply = pendingText
+			config.ReplyType = "text"
+			config.ReplyFileID = ""
+			config.ReplyCaption = ""
+			config.State = ""
+			saveConfig(botToken, adminID, config, msgID)
+			sendMenu(botToken, adminID, lang, tr(lang, "saved_text_msg"))
+
+		case "reply_preview_cancel":
+			pendingReplyPreviewMu.Lock()
+			delete(pendingReplyPreviews, adminID)
+			pendingReplyPreviewMu.Unlock()
+			config.State = ""
+			saveConfig(botToken, adminID, config, msgID)
+			sendMenu(botToken, adminID, lang, "تم إلغاء المعاينة، ولم يتغير الرد المحفوظ.")
+
 		case "main_menu":
 			config.State = ""
 			saveConfig(botToken, adminID, config, msgID)
@@ -653,9 +707,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			saveConfig(botToken, adminID, config, msgID)
 			sendMenu(botToken, adminID, lang, tr(lang, "started_msg"))
 		case "edit_text":
-			config.ReplyType = "text"
-			config.ReplyFileID = ""
-			config.ReplyCaption = ""
+			// لا تغيّر الرد النشط عند بدء التحرير؛ احفظ حالة الانتظار فقط.
 			config.State = "waiting_text"
 			saveConfig(botToken, adminID, config, msgID)
 			sendSubMenu(botToken, adminID, lang, tr(lang, "edit_text_prompt"))
@@ -1073,13 +1125,18 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		// ===== الحالات القديمة =====
 		} else if config.State == "waiting_text" {
-			config.AutoReply = msg.Text
-			config.ReplyType = "text"
-			config.ReplyFileID = ""
-			config.ReplyCaption = ""
-			config.State = ""
+			if strings.TrimSpace(msg.Text) == "" {
+				sendSubMenu(botToken, chatID, lang, "أرسل نصاً غير فارغ للمعاينة.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			pendingReplyPreviewMu.Lock()
+			pendingReplyPreviews[chatID] = msg.Text
+			pendingReplyPreviewMu.Unlock()
+
+			config.State = "waiting_text_preview"
 			saveConfig(botToken, chatID, config, msgID)
-			sendMenu(botToken, chatID, lang, tr(lang, "saved_text_msg"))
+			sendReplyPreview(botToken, chatID, msg.Text, lang)
 		} else if config.State == "waiting_id" {
 			id, err := strconv.ParseInt(strings.TrimSpace(msg.Text), 10, 64)
 			if err == nil {
@@ -1329,6 +1386,19 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				cfg.BusinessConnID = bc.ID
 				saveConfig(botToken, bc.UserChatID, cfg, msgID)
 			}
+		} else {
+			// إزالة الاتصال المعطّل من الذاكرة حتى لا يُستخدم لاحقاً.
+			bizCacheMu.Lock()
+			delete(bizCache, bc.ID)
+			bizCacheMu.Unlock()
+
+			if bc.UserChatID != 0 {
+				cfg, msgID := getConfig(botToken, bc.UserChatID)
+				if cfg.BusinessConnID == bc.ID {
+					cfg.BusinessConnID = ""
+					saveConfig(botToken, bc.UserChatID, cfg, msgID)
+				}
+			}
 		}
 		w.WriteHeader(http.StatusOK)
 		return
@@ -1424,9 +1494,18 @@ func getAdminIDFromBusinessConn(token string, connID string) int64 {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		log.Printf("getBusinessConnection أعاد HTTP %d", resp.StatusCode)
+		return 0
+	}
+
 	var res BusinessConnectionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		log.Println("خطأ فك تشفير getBusinessConnection:", err)
+		return 0
+	}
+	if !res.Ok {
+		log.Printf("فشل getBusinessConnection: %s", res.Description)
 		return 0
 	}
 
@@ -1809,8 +1888,25 @@ func sendBusinessMessage(token string, chatID int64, text, bizID string) {
 		"text":                   text,
 		"business_connection_id": bizID,
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	b, err := json.Marshal(payload)
+	if err != nil {
+		log.Println("تعذر تجهيز sendBusinessMessage:", err)
+		return
+	}
+	resp, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if err != nil {
+		log.Println("تعذر إرسال sendBusinessMessage:", err)
+		return
+	}
+	defer resp.Body.Close()
+	var result apiResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Println("تعذر قراءة استجابة sendBusinessMessage")
+		return
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
+		log.Printf("فشل sendBusinessMessage (HTTP %d): %s", resp.StatusCode, result.Description)
+	}
 }
 
 func sendStoryDurationMenu(token string, chatID int64, lang string) {
@@ -1873,14 +1969,67 @@ func sendSubMenu(token string, chatID int64, lang, text string) {
 	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
 }
 
+
+func sendReplyPreview(token string, chatID int64, previewText, lang string) {
+	keyboard := map[string]interface{}{
+		"inline_keyboard": [][]map[string]interface{}{
+			{
+				{"text": "✅ تأكيد الحفظ", "callback_data": "reply_preview_confirm"},
+				{"text": "❌ إلغاء", "callback_data": "reply_preview_cancel"},
+			},
+		},
+	}
+	payload := map[string]interface{}{
+		"chat_id": chatID,
+		"text": "👁️ معاينة الرد التلقائي — لن يُرسل هذا النص إلى العميل الآن:\n\n" + previewText,
+		"reply_markup": keyboard,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		log.Println("تعذر تجهيز معاينة الرد:", err)
+		return
+	}
+	resp, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if err != nil {
+		log.Println("تعذر إرسال معاينة الرد:", err)
+		return
+	}
+	defer resp.Body.Close()
+	var result apiResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Println("تعذر قراءة استجابة معاينة الرد")
+		return
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
+		log.Printf("فشل إرسال معاينة الرد (HTTP %d): %s", resp.StatusCode, result.Description)
+	}
+}
+
 func sendMessage(token string, chatID int64, text string) {
 	payload := map[string]interface{}{
 		"chat_id":    chatID,
 		"text":       text,
 		"parse_mode": "Markdown",
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	b, err := json.Marshal(payload)
+	if err != nil {
+		log.Println("تعذر تجهيز sendMessage:", err)
+		return
+	}
+	resp, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
+	if err != nil {
+		log.Println("تعذر إرسال sendMessage:", err)
+		return
+	}
+	defer resp.Body.Close()
+	var result apiResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Println("تعذر قراءة استجابة sendMessage")
+		return
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
+		log.Printf("فشل sendMessage (HTTP %d): %s", resp.StatusCode, result.Description)
+	}
 }
 
 func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID string) {
