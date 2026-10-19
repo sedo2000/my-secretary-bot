@@ -1966,18 +1966,24 @@ func sendBusinessMediaReply(token string, chatID int64, mediaType, fileID, capti
 		payload["caption"] = caption
 		payload["parse_mode"] = "Markdown"
 	}
-	b, _ := json.Marshal(payload)
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("تعذر تجهيز طلب الوسائط")
+	}
 	resp, err := mediaClient.Post("https://api.telegram.org/bot"+token+"/"+method, "application/json", bytes.NewBuffer(b))
 	if err != nil {
-		return err
+		return fmt.Errorf("تعذر إرسال وسائط الرد")
 	}
 	defer resp.Body.Close()
 	var res apiResult
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return err
+		return fmt.Errorf("تعذر قراءة استجابة وسائط الرد")
 	}
-	if !res.Ok {
-		return fmt.Errorf(res.Description)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !res.Ok {
+		if res.Description == "" {
+			res.Description = "استجابة غير ناجحة"
+		}
+		return fmt.Errorf("فشل إرسال الوسائط (HTTP %d): %s", resp.StatusCode, res.Description)
 	}
 	return nil
 }
