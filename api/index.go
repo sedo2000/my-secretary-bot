@@ -690,13 +690,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		deleteMessage(botToken, cb.Message.Chat.ID, cb.Message.MessageID)
 		adminID := cb.From.ID
 		config, msgID := getConfig(botToken, adminID)
 		if msgID < 0 {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		deleteMessage(botToken, cb.Message.Chat.ID, cb.Message.MessageID)
 		lang := config.Lang
 
 		switch cb.Data {
@@ -1167,7 +1167,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			}
 			config.PendingReplyPreview = msg.Text
 			config.State = "waiting_text_preview"
-			saveConfig(botToken, chatID, config, msgID)
+			if !saveConfig(botToken, chatID, config, msgID) {
+				sendSubMenu(botToken, chatID, lang, "تعذر حفظ المعاينة. تأكد أن النص ليس طويلاً جداً وأن Telegram متاح، ثم حاول مجدداً.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
 			sendReplyPreview(botToken, chatID, msg.Text, lang)
 		} else if config.State == "waiting_id" {
 			id, err := strconv.ParseInt(strings.TrimSpace(msg.Text), 10, 64)
@@ -1645,6 +1649,10 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) bool
 		return false
 	}
 	cfgText := string(b)
+	if len([]rune(cfgText)) > 4000 {
+		log.Println("تم رفض حفظ الإعدادات لأنها تتجاوز حد رسالة Telegram")
+		return false
+	}
 
 	if pinnedMsgID > 0 {
 		apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/editMessageText", token)
