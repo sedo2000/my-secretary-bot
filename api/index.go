@@ -591,8 +591,9 @@ type CallbackQuery struct {
 }
 
 type BusinessConnectionResponse struct {
-	Ok     bool `json:"ok"`
-	Result struct {
+	Ok          bool   `json:"ok"`
+	Description string `json:"description"`
+	Result      struct {
 		User struct {
 			ID int64 `json:"user_id"`
 		} `json:"user"`
@@ -692,6 +693,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		deleteMessage(botToken, cb.Message.Chat.ID, cb.Message.MessageID)
 		adminID := cb.From.ID
 		config, msgID := getConfig(botToken, adminID)
+		if msgID < 0 {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		lang := config.Lang
 
 		switch cb.Data {
@@ -995,6 +1000,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		chatID := msg.Chat.ID
 
 		config, msgID := getConfig(botToken, chatID)
+		if msgID < 0 {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		lang := config.Lang
 
 		if strings.TrimSpace(msg.Text) == "بوت" || strings.Contains(msg.Text, "بوت") {
@@ -1275,7 +1284,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		config, _ := getConfig(botToken, adminID)
+		config, configMsgID := getConfig(botToken, adminID)
+		if configMsgID < 0 {
+			// لا نرسل رداً تلقائياً اعتماداً على إعدادات افتراضية عند تعذر القراءة.
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 
 		if config.IsStopped {
 			w.WriteHeader(http.StatusOK)
