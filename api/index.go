@@ -606,6 +606,16 @@ type apiResult struct {
 	Description string `json:"description"`
 }
 
+func isTelegramFormattingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "can't parse entities") ||
+		strings.Contains(message, "can't find end of the entity") ||
+		strings.Contains(message, "unsupported start tag")
+}
+
 func postTelegramJSON(token, method string, payload interface{}) (apiResult, error) {
 	var result apiResult
 	body, err := json.Marshal(payload)
@@ -696,7 +706,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		deleteMessage(botToken, cb.Message.Chat.ID, cb.Message.MessageID)
+		if cb.Data != "reply_preview_confirm" && cb.Data != "reply_preview_cancel" {
+			deleteMessage(botToken, cb.Message.Chat.ID, cb.Message.MessageID)
+		}
 		lang := config.Lang
 
 		switch cb.Data {
@@ -715,12 +727,17 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				sendMenu(botToken, adminID, lang, "تعذر حفظ الرد بسبب خطأ في Telegram. لم يتم تأكيد الحفظ؛ حاول مرة أخرى.")
 				break
 			}
+			deleteMessage(botToken, cb.Message.Chat.ID, cb.Message.MessageID)
 			sendMenu(botToken, adminID, lang, tr(lang, "saved_text_msg"))
 
 		case "reply_preview_cancel":
 			config.PendingReplyPreview = ""
 			config.State = ""
-			saveConfig(botToken, adminID, config, msgID)
+			if !saveConfig(botToken, adminID, config, msgID) {
+				sendMenu(botToken, adminID, lang, "تعذر حفظ الإلغاء بسبب خطأ في Telegram. لم تتغير الإعدادات المحفوظة.")
+				break
+			}
+			deleteMessage(botToken, cb.Message.Chat.ID, cb.Message.MessageID)
 			sendMenu(botToken, adminID, lang, "تم إلغاء المعاينة، ولم يتغير الرد المحفوظ.")
 
 		case "main_menu":
@@ -741,7 +758,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			// لا تغيّر الرد النشط عند بدء التحرير؛ احفظ حالة الانتظار فقط.
 			config.PendingReplyPreview = ""
 			config.State = "waiting_text"
-			saveConfig(botToken, adminID, config, msgID)
+			if !saveConfig(botToken, adminID, config, msgID) {
+				sendMenu(botToken, adminID, lang, "تعذر بدء تعديل النص بسبب خطأ في Telegram. لم يتغير الرد الحالي.")
+				break
+			}
 			sendSubMenu(botToken, adminID, lang, tr(lang, "edit_text_prompt"))
 
 		// ===== قائمة الوسائط =====
@@ -754,7 +774,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			// احتفظ بإعداد الوسائط الحالي حتى يؤكد المستخدم النص الجديد.
 			config.PendingReplyPreview = ""
 			config.State = "waiting_text"
-			saveConfig(botToken, adminID, config, msgID)
+			if !saveConfig(botToken, adminID, config, msgID) {
+				sendMenu(botToken, adminID, lang, "تعذر بدء تعديل النص بسبب خطأ في Telegram. لم يتغير الرد الحالي.")
+				break
+			}
 			sendSubMenu(botToken, adminID, lang, tr(lang, "edit_text_prompt"))
 
 		case "media_voice", "media_audio", "media_gif", "media_sticker", "media_video", "media_photo":
@@ -2118,10 +2141,13 @@ func sendMessage(token string, chatID int64, text string) {
 		"parse_mode": "Markdown",
 	}
 	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
-		// بعض النصوص الديناميكية قد تكسر Markdown؛ أعد الإرسال كنص عادي.
+		if !isTelegramFormattingError(err) {
+			log.Printf("فشل sendMessage: %v", err)
+			return
+		}
 		delete(payload, "parse_mode")
 		if _, retryErr := postTelegramJSON(token, "sendMessage", payload); retryErr != nil {
-			log.Printf("فشل sendMessage بعد إعادة المحاولة كنص عادي: %v", retryErr)
+			log.Printf("فشل sendMessage بعد تعطيل Markdown: %v", retryErr)
 		}
 	}
 }
@@ -2146,7 +2172,7 @@ func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID st
 			}
 		}
 		if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
-			if len(chunks) == 1 {
+			if len(chunks) == 1 && isTelegramFormattingError(err) {
 				delete(payload, "parse_mode")
 				if _, retryErr := postTelegramJSON(token, "sendMessage", payload); retryErr == nil {
 					continue
