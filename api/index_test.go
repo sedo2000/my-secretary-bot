@@ -77,3 +77,26 @@ func TestHandlerIgnoresDeletedBusinessMessages(t *testing.T) {
 		t.Fatalf("expected %d, got %d", http.StatusOK, rec.Code)
 	}
 }
+func TestSplitTelegramTextRespectsRuneLimit(t *testing.T) {
+	input := strings.Repeat("ع", 11)
+	chunks := splitTelegramText(input, 4)
+	if len(chunks) != 3 {
+		t.Fatalf("expected 3 chunks, got %d", len(chunks))
+	}
+	joined := strings.Join(chunks, "")
+	if joined != input {
+		t.Fatalf("split/join changed input: got %q", joined)
+	}
+	for _, chunk := range chunks {
+		if got := len([]rune(chunk)); got > 4 {
+			t.Fatalf("chunk has %d runes; limit is 4", got)
+		}
+	}
+}
+
+func TestSplitTelegramTextEmptyInput(t *testing.T) {
+	chunks := splitTelegramText("", 3900)
+	if len(chunks) != 1 || chunks[0] != "" {
+		t.Fatalf("expected one empty chunk, got %#v", chunks)
+	}
+}
