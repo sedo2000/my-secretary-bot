@@ -1935,8 +1935,9 @@ func sendPreviewMedia(token string, chatID int64, mediaType, fileID, caption str
 	if mediaType != "sticker" && caption != "" {
 		payload["caption"] = caption
 	}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/"+method, "application/json", bytes.NewBuffer(b))
+	if _, err := postTelegramJSON(token, method, payload); err != nil {
+		log.Printf("فشل إرسال معاينة الوسائط: %v", err)
+	}
 }
 
 func sendBusinessMediaReply(token string, chatID int64, mediaType, fileID, caption, bizID string) error {
@@ -1994,24 +1995,8 @@ func sendBusinessMessage(token string, chatID int64, text, bizID string) {
 		"text":                   text,
 		"business_connection_id": bizID,
 	}
-	b, err := json.Marshal(payload)
-	if err != nil {
-		log.Println("تعذر تجهيز sendBusinessMessage:", err)
-		return
-	}
-	resp, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
-	if err != nil {
-		log.Println("تعذر إرسال sendBusinessMessage:", err)
-		return
-	}
-	defer resp.Body.Close()
-	var result apiResult
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Println("تعذر قراءة استجابة sendBusinessMessage")
-		return
-	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
-		log.Printf("فشل sendBusinessMessage (HTTP %d): %s", resp.StatusCode, result.Description)
+	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+		log.Printf("فشل sendBusinessMessage: %v", err)
 	}
 }
 
@@ -2080,6 +2065,11 @@ func sendSubMenu(token string, chatID int64, lang, text string) {
 
 
 func sendReplyPreview(token string, chatID int64, previewText, lang string) {
+	const previewLimit = 3800
+	runes := []rune(previewText)
+	if len(runes) > previewLimit {
+		previewText = string(runes[:previewLimit]) + "\n… (المعاينة مختصرة؛ سيتم حفظ النص الكامل عند التأكيد)"
+	}
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
 			{
@@ -2093,24 +2083,8 @@ func sendReplyPreview(token string, chatID int64, previewText, lang string) {
 		"text": "👁️ معاينة الرد التلقائي — لن يُرسل هذا النص إلى العميل الآن:\n\n" + previewText,
 		"reply_markup": keyboard,
 	}
-	b, err := json.Marshal(payload)
-	if err != nil {
-		log.Println("تعذر تجهيز معاينة الرد:", err)
-		return
-	}
-	resp, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
-	if err != nil {
-		log.Println("تعذر إرسال معاينة الرد:", err)
-		return
-	}
-	defer resp.Body.Close()
-	var result apiResult
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Println("تعذر قراءة استجابة معاينة الرد")
-		return
-	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
-		log.Printf("فشل إرسال معاينة الرد (HTTP %d): %s", resp.StatusCode, result.Description)
+	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+		log.Printf("فشل إرسال معاينة الرد: %v", err)
 	}
 }
 
@@ -2142,37 +2116,46 @@ func sendMessage(token string, chatID int64, text string) {
 }
 
 func sendBusinessReplyWithQuoteButton(token string, chatID int64, text, bizID string) {
-	initialQuote := quotes[rand.Intn(len(quotes))]
-	keyboard := map[string]interface{}{
-		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "✨ " + initialQuote, "callback_data": "change_quote", "style": "primary"}},
-		},
+	chunks := splitTelegramText(text, 3900)
+	for i, chunk := range chunks {
+		payload := map[string]interface{}{
+			"chat_id":                chatID,
+			"text":                   chunk,
+			"business_connection_id": bizID,
+		}
+		if i == len(chunks)-1 {
+			initialQuote := quotes[rand.Intn(len(quotes))]
+			payload["reply_markup"] = map[string]interface{}{
+				"inline_keyboard": [][]map[string]interface{}{
+					{{"text": "✨ " + initialQuote, "callback_data": "change_quote", "style": "primary"}},
+				},
+			}
+		}
+		if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
+			log.Printf("فشل إرسال جزء من الرد التلقائي: %v", err)
+			return
+		}
 	}
-	payload := map[string]interface{}{
-		"chat_id":                chatID,
-		"text":                   text,
-		"business_connection_id": bizID,
-		"reply_markup":           keyboard,
+}
+
+func splitTelegramText(text string, limit int) []string {
+	if limit <= 0 {
+		return []string{text}
 	}
-	b, err := json.Marshal(payload)
-	if err != nil {
-		log.Println("تعذر تجهيز الرد التلقائي:", err)
-		return
+	runes := []rune(text)
+	if len(runes) == 0 {
+		return []string{""}
 	}
-	resp, err := httpClient.Post("https://api.telegram.org/bot"+token+"/sendMessage", "application/json", bytes.NewBuffer(b))
-	if err != nil {
-		log.Println("تعذر إرسال الرد التلقائي:", err)
-		return
+	chunks := make([]string, 0, (len(runes)+limit-1)/limit)
+	for len(runes) > 0 {
+		end := limit
+		if len(runes) < end {
+			end = len(runes)
+		}
+		chunks = append(chunks, string(runes[:end]))
+		runes = runes[end:]
 	}
-	defer resp.Body.Close()
-	var result apiResult
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Println("تعذر قراءة استجابة الرد التلقائي")
-		return
-	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
-		log.Printf("فشل إرسال الرد التلقائي (HTTP %d): %s", resp.StatusCode, result.Description)
-	}
+	return chunks
 }
 
 func updateButtonQuote(token string, chatID int64, msgID int, newQuote string) {
@@ -2397,7 +2380,7 @@ func setBusinessAccountProfilePhoto(token, businessConnID, fileID string) error 
 // نشر قصة واحدة على الملف الشخصي (post_to_chat_page = true)
 func postBusinessStory(token, businessConnID, mediaType, fileID string, durationSeconds int, activePeriod string, lang string) error {
 	if mediaType == "video" && durationSeconds > 60 {
-		return fmt.Errorf(tr(lang, "video_too_long_error"))
+		return fmt.Errorf("%s", tr(lang, "video_too_long_error"))
 	}
 
 	data, err := downloadTelegramFile(token, fileID)
