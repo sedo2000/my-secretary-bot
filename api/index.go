@@ -417,7 +417,12 @@ type BotConfig struct {
 	StoryMentionReply   string `json:"story_mention_reply"`
 	ReactionReply       string `json:"reaction_reply"`
 	VoiceReply          string `json:"voice_reply"`
-	PendingReplyPreview string `json:"pending_reply_preview,omitempty"`
+	PendingReplyPreview        string `json:"pending_reply_preview,omitempty"`
+	SmartReplyEnabled          bool   `json:"smart_reply_enabled,omitempty"`
+	PendingSmartReply          string `json:"pending_smart_reply,omitempty"`
+	PendingSmartChatID         int64  `json:"pending_smart_chat_id,omitempty"`
+	PendingSmartBusinessConnID string `json:"pending_smart_business_conn_id,omitempty"`
+	PendingSmartCustomerName   string `json:"pending_smart_customer_name,omitempty"`
 }
 
 // 🆕 عنصر ستوري
@@ -564,7 +569,8 @@ type UsersSharedData struct {
 type Message struct {
 	MessageID int `json:"message_id"`
 	Chat      struct {
-		ID int64 `json:"id"`
+		ID   int64  `json:"id"`
+		Type string `json:"type"`
 	} `json:"chat"`
 	From struct {
 		ID int64 `json:"id"`
@@ -700,18 +706,138 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if cb.Data == "check_subscription" {
+			subscribed, subErr := isUserSubscribed(botToken, cb.From.ID)
+			if subErr != nil {
+				sendSubscriptionGate(botToken, cb.Message.Chat.ID, subErr.Error())
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			if !subscribed {
+				sendSubscriptionGate(botToken, cb.Message.Chat.ID, "")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			cfg, cfgMsgID := getConfig(botToken, cb.From.ID)
+			if cfgMsgID >= 0 {
+				sendMenu(botToken, cb.From.ID, cfg.Lang, "✅ تم التحقق من اشتراكك. أهلاً بك في Nerd.")
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if cb.Message.Chat.ID != cb.From.ID {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		subscribed, subErr := isUserSubscribed(botToken, cb.From.ID)
+		if subErr != nil {
+			sendSubscriptionGate(botToken, cb.Message.Chat.ID, subErr.Error())
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if !subscribed {
+			sendSubscriptionGate(botToken, cb.Message.Chat.ID, "")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
 		adminID := cb.From.ID
 		config, msgID := getConfig(botToken, adminID)
 		if msgID < 0 {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		if cb.Data != "reply_preview_confirm" && cb.Data != "reply_preview_cancel" {
+		if cb.Data != "reply_preview_confirm" && cb.Data != "reply_preview_cancel" &&
+			cb.Data != "smart_preview_confirm" && cb.Data != "smart_preview_cancel" && cb.Data != "smart_preview_edit" {
 			deleteMessage(botToken, cb.Message.Chat.ID, cb.Message.MessageID)
 		}
 		lang := config.Lang
 
 		switch cb.Data {
+		case "activation_guide":
+			sendActivationGuide(botToken, adminID, lang)
+
+		case "smart_reply_menu":
+			sendSmartReplyMenu(botToken, adminID, lang, config, "")
+
+		case "smart_reply_toggle":
+			if !config.SmartReplyEnabled && strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY")) == "" {
+				sendSmartReplyMenu(botToken, adminID, lang, config, "⚠️ أضف OPENROUTER_API_KEY إلى Vercel ثم أعد النشر قبل تشغيل الرد الذكي.")
+				break
+			}
+			config.SmartReplyEnabled = !config.SmartReplyEnabled
+			config.State = ""
+			if !saveConfig(botToken, adminID, config, msgID) {
+				sendSmartReplyMenu(botToken, adminID, lang, config, "تعذر حفظ الإعدادات. لم يتم تغيير الحالة المحفوظة.")
+				break
+			}
+			notice := "🧠 تم إيقاف الرد الذكي."
+			if config.SmartReplyEnabled {
+				notice = "🧠 تم تشغيل الرد الذكي. ستصل إليك معاينة قبل إرسال أي رد للعميل."
+			}
+			sendSmartReplyMenu(botToken, adminID, lang, config, notice)
+
+		case "smart_preview_confirm":
+			if config.PendingSmartReply == "" || config.State != "waiting_smart_preview" ||
+				config.PendingSmartChatID == 0 || config.PendingSmartBusinessConnID == "" {
+				sendMenu(botToken, adminID, lang, "انتهت صلاحية معاينة الرد الذكي أو لا توجد معاينة معلّقة.")
+				break
+			}
+			pendingReply := config.PendingSmartReply
+			pendingChatID := config.PendingSmartChatID
+			pendingBusinessID := config.PendingSmartBusinessConnID
+			config.PendingSmartReply = ""
+			config.PendingSmartChatID = 0
+			config.PendingSmartBusinessConnID = ""
+			config.PendingSmartCustomerName = ""
+			config.State = ""
+			if !saveConfig(botToken, adminID, config, msgID) {
+				sendMenu(botToken, adminID, lang, "تعذر حفظ حالة الموافقة؛ لم أرسل الرد لتجنب الإرسال المكرر.")
+				break
+			}
+			if err := callBusinessAPI(botToken, "sendMessage", map[string]interface{}{
+				"chat_id": pendingChatID, "text": pendingReply, "business_connection_id": pendingBusinessID,
+			}); err != nil {
+				config.PendingSmartReply = pendingReply
+				config.PendingSmartChatID = pendingChatID
+				config.PendingSmartBusinessConnID = pendingBusinessID
+				config.State = "waiting_smart_preview"
+				if !saveConfig(botToken, adminID, config, msgID) {
+					log.Printf("فشل إرسال الرد الذكي وتعذر استعادة المعاينة للإدارة %d", adminID)
+				}
+				sendMenu(botToken, adminID, lang, "❌ تعذر إرسال الرد إلى العميل. أُعيدت المعاينة إن أمكن؛ حاول مجدداً بعد التحقق من اتصال Business.")
+				break
+			}
+			deleteMessage(botToken, cb.Message.Chat.ID, cb.Message.MessageID)
+			sendMenu(botToken, adminID, lang, "✅ تمت الموافقة وإرسال الرد إلى العميل.")
+
+		case "smart_preview_cancel":
+			config.PendingSmartReply = ""
+			config.PendingSmartChatID = 0
+			config.PendingSmartBusinessConnID = ""
+			config.PendingSmartCustomerName = ""
+			config.State = ""
+			if !saveConfig(botToken, adminID, config, msgID) {
+				sendMenu(botToken, adminID, lang, "تعذر حفظ الإلغاء؛ بقيت المعاينة كما هي.")
+				break
+			}
+			deleteMessage(botToken, cb.Message.Chat.ID, cb.Message.MessageID)
+			sendMenu(botToken, adminID, lang, "🗑️ تم إلغاء الرد المقترح ولم يُرسل إلى العميل.")
+
+		case "smart_preview_edit":
+			if config.PendingSmartReply == "" || config.State != "waiting_smart_preview" {
+				sendMenu(botToken, adminID, lang, "لا توجد معاينة ذكية قابلة للتعديل.")
+				break
+			}
+			deleteMessage(botToken, cb.Message.Chat.ID, cb.Message.MessageID)
+			config.State = "waiting_smart_edit"
+			if !saveConfig(botToken, adminID, config, msgID) {
+				sendMenu(botToken, adminID, lang, "تعذر بدء تعديل الرد.")
+				break
+			}
+			sendSubMenu(botToken, adminID, lang, "✏️ أرسل نص الرد المعدّل. لن يُرسل إلى العميل حتى تضغط موافقة وإرسال.")
+
 		case "reply_preview_confirm":
 			if config.PendingReplyPreview == "" || config.State != "waiting_text_preview" {
 				sendMenu(botToken, adminID, lang, "انتهت صلاحية المعاينة. أرسل النص من جديد.")
@@ -1022,6 +1148,20 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		msg := update.Message
 		chatID := msg.Chat.ID
 
+		if msg.Chat.Type == "private" {
+			subscribed, subErr := isUserSubscribed(botToken, msg.From.ID)
+			if subErr != nil {
+				sendSubscriptionGate(botToken, chatID, subErr.Error())
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			if !subscribed {
+				sendSubscriptionGate(botToken, chatID, "")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		}
+
 		config, msgID := getConfig(botToken, chatID)
 		if msgID < 0 {
 			w.WriteHeader(http.StatusOK)
@@ -1182,6 +1322,20 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			sendBatchStoryMenu(botToken, chatID, lang, count)
 
 		// ===== الحالات القديمة =====
+		} else if config.State == "waiting_smart_edit" {
+			if strings.TrimSpace(msg.Text) == "" {
+				sendSubMenu(botToken, chatID, lang, "أرسل نصاً غير فارغ للرد المقترح.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			config.PendingSmartReply = strings.TrimSpace(msg.Text)
+			config.State = "waiting_smart_preview"
+			if !saveConfig(botToken, chatID, config, msgID) {
+				sendSubMenu(botToken, chatID, lang, "تعذر حفظ الرد المعدّل. لم يتم إرسال أي شيء.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			sendSmartReplyPreview(botToken, chatID, config.PendingSmartChatID, config.PendingSmartCustomerName, config.PendingSmartReply)
 		} else if config.State == "waiting_text" {
 			if strings.TrimSpace(msg.Text) == "" {
 				sendSubMenu(botToken, chatID, lang, "أرسل نصاً غير فارغ للمعاينة.")
@@ -1359,6 +1513,34 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		// الرد على كلمة "بوت"
 		if strings.TrimSpace(msg.Text) == "بوت" || strings.Contains(msg.Text, "بوت") {
 			sendNerdBotInfoBusiness(botToken, customerChatID, msg.BusinessConnectionID)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// الرد الذكي ينشئ معاينة خاصة بالمشرف ولا يرسل شيئاً قبل الموافقة.
+		if config.SmartReplyEnabled && strings.TrimSpace(msg.Text) != "" {
+			if config.PendingSmartReply != "" || config.State == "waiting_smart_preview" || config.State == "waiting_smart_edit" {
+				sendMessage(botToken, adminID, "⚠️ توجد معاينة ذكية معلّقة. أرسلها أو عدّلها أو ألغها قبل إنشاء معاينة أخرى.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			suggestedReply, aiErr := generateSmartReply(msg.Text)
+			if aiErr != nil {
+				sendMessage(botToken, adminID, "❌ تعذر إنشاء رد ذكي، ولم يُرسل أي رد تلقائي. التفاصيل: "+aiErr.Error())
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			config.PendingSmartReply = suggestedReply
+			config.PendingSmartChatID = customerChatID
+			config.PendingSmartBusinessConnID = msg.BusinessConnectionID
+			config.PendingSmartCustomerName = customerName
+			config.State = "waiting_smart_preview"
+			if !saveConfig(botToken, adminID, config, configMsgID) {
+				sendMessage(botToken, adminID, "❌ تعذر حفظ معاينة الرد الذكي. لم يُرسل رد إلى العميل.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			sendSmartReplyPreview(botToken, adminID, customerChatID, customerName, suggestedReply)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -1848,6 +2030,8 @@ func sendMenu(token string, chatID int64, lang, text string) {
 				{"text": tr(lang, "start_btn"), "callback_data": "start", "style": "success"},
 			},
 			{{"text": tr(lang, "edit_text_btn"), "callback_data": "edit_text", "style": "primary"}},
+			{{"text": "🧠 المحادثة الآلية الذكية", "callback_data": "smart_reply_menu", "style": "success"}},
+			{{"text": "🛠️ طريقة تفعيل البوت", "callback_data": "activation_guide", "style": "primary"}},
 			{{"text": tr(lang, "media_reply_btn"), "callback_data": "media_menu", "style": "success"}},
 			{{"text": tr(lang, "interaction_menu_btn"), "callback_data": "interaction_menu", "style": "success"}},
 			{{"text": tr(lang, "batch_story_btn"), "callback_data": "batch_story_menu", "style": "success"}},
