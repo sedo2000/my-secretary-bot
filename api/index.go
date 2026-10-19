@@ -635,6 +635,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid update payload", http.StatusBadRequest)
 		return
 	}
+	var trailing interface{}
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		log.Println("تم رفض تحديث Telegram لاحتوائه على بيانات زائدة")
+		http.Error(w, "invalid update payload", http.StatusBadRequest)
+		return
+	}
 
 	// حسب الإعداد المعتمد: تجاهل تعديلات الرسائل وحذفها تماماً،
 	// ولا تمريرها إلى مسار الرد التلقائي العادي.
@@ -647,6 +653,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if update.CallbackQuery != nil {
 		cb := update.CallbackQuery
 		answerCallback(botToken, cb.ID)
+		if cb.Message == nil {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 
 		if cb.Data == "change_quote" {
 			newQuote := quotes[rand.Intn(len(quotes))]
@@ -672,7 +682,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			config.ReplyFileID = ""
 			config.ReplyCaption = ""
 			config.State = ""
-			saveConfig(botToken, adminID, config, msgID)
+			if !saveConfig(botToken, adminID, config, msgID) {
+				sendMenu(botToken, adminID, lang, "تعذر حفظ الرد بسبب خطأ في Telegram. لم يتم تأكيد الحفظ؛ حاول مرة أخرى.")
+				break
+			}
 			sendMenu(botToken, adminID, lang, tr(lang, "saved_text_msg"))
 
 		case "reply_preview_cancel":
@@ -1528,17 +1541,17 @@ func getConfig(token string, chatID int64) (BotConfig, int) {
 		return defaultCfg, 0
 	}
 
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/getChat?chat_id=%d", token, chatID)
-	resp, err := httpClient.Get(url)
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/getChat?chat_id=%d", token, chatID)
+	resp, err := httpClient.Get(apiURL)
 	if err != nil {
-		log.Println("خطأ getChat:", err)
-		return defaultCfg, 0
+		log.Println("خطأ getChat؛ تم منع الكتابة فوق الإعدادات:", err)
+		return defaultCfg, -1
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		log.Printf("getChat أعاد HTTP %d", resp.StatusCode)
-		return defaultCfg, 0
+		log.Printf("getChat أعاد HTTP %d؛ تم منع الكتابة فوق الإعدادات", resp.StatusCode)
+		return defaultCfg, -1
 	}
 
 	var res struct {
@@ -1553,17 +1566,18 @@ func getConfig(token string, chatID int64) (BotConfig, int) {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		log.Println("خطأ فك تشفير getChat:", err)
-		return defaultCfg, 0
+		log.Println("خطأ فك تشفير getChat؛ تم منع الكتابة فوق الإعدادات")
+		return defaultCfg, -1
 	}
 	if !res.Ok {
-		log.Printf("فشل getChat: %s", res.Description)
-		return defaultCfg, 0
+		log.Printf("فشل getChat؛ تم منع الكتابة فوق الإعدادات: %s", res.Description)
+		return defaultCfg, -1
 	}
 
 	if res.Result.PinnedMessage.MessageID != 0 {
 		var cfg BotConfig
-		if err := json.Unmarshal([]byte(res.Result.PinnedMessage.Text), &cfg); err == nil {
+		pinnedText := strings.TrimSpace(res.Result.PinnedMessage.Text)
+		if err := json.Unmarshal([]byte(pinnedText), &cfg); err == nil {
 			if cfg.Lang == "" {
 				cfg.Lang = "ar"
 			}
@@ -1572,20 +1586,30 @@ func getConfig(token string, chatID int64) (BotConfig, int) {
 			}
 			return cfg, res.Result.PinnedMessage.MessageID
 		}
+		// إذا كانت الرسالة المثبتة تبدو كإعدادات JSON لكن تعذّر تحليلها،
+		// لا تنشئ إعداداً جديداً قد يتسبب في فقدان الإعدادات القديمة.
+		if strings.HasPrefix(pinnedText, "{") {
+			log.Println("تعذر تحليل الإعدادات المثبتة؛ تم منع استبدالها")
+			return defaultCfg, -1
+		}
 	}
 
 	return defaultCfg, 0
 }
 
-func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
-	if chatID == 0 {
-		return
+func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) bool {
+	if chatID == 0 || pinnedMsgID < 0 {
+		return false
 	}
-	b, _ := json.Marshal(cfg)
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		log.Println("تعذر تحويل الإعدادات إلى JSON:", err)
+		return false
+	}
 	cfgText := string(b)
 
 	if pinnedMsgID > 0 {
-		url := fmt.Sprintf("https://api.telegram.org/bot%s/editMessageText", token)
+		apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/editMessageText", token)
 		payload := map[string]interface{}{
 			"chat_id":    chatID,
 			"message_id": pinnedMsgID,
@@ -1594,78 +1618,89 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 		pBytes, err := json.Marshal(payload)
 		if err != nil {
 			log.Println("تعذر تجهيز editMessageText:", err)
-			return
+			return false
 		}
-		resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(pBytes))
+		resp, err := httpClient.Post(apiURL, "application/json", bytes.NewBuffer(pBytes))
 		if err != nil {
 			log.Println("خطأ editMessageText:", err)
-			return
+			return false
 		}
 		defer resp.Body.Close()
 		var result apiResult
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			log.Println("تعذر قراءة استجابة editMessageText")
-			return
+			return false
 		}
 		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
 			log.Printf("فشل editMessageText (HTTP %d): %s", resp.StatusCode, result.Description)
+			return false
 		}
-	} else {
-		url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
-		payload := map[string]interface{}{
-			"chat_id": chatID,
-			"text":    cfgText,
-		}
-		pBytes, _ := json.Marshal(payload)
-		resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(pBytes))
-		if err != nil {
-			log.Println("خطأ sendMessage (saveConfig):", err)
-			return
-		}
-		defer resp.Body.Close()
-		var res struct {
-			Ok          bool   `json:"ok"`
-			Description string `json:"description"`
-			Result      struct {
-				MessageID int `json:"message_id"`
-			} `json:"result"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-			log.Println("خطأ فك تشفير sendMessage:", err)
-			return
-		}
-		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !res.Ok {
-			log.Printf("فشل sendMessage لحفظ الإعدادات (HTTP %d): %s", resp.StatusCode, res.Description)
-			return
-		}
-		if res.Result.MessageID != 0 {
-			pinUrl := fmt.Sprintf("https://api.telegram.org/bot%s/pinChatMessage", token)
-			pinPayload := map[string]interface{}{
-				"chat_id":              chatID,
-				"message_id":           res.Result.MessageID,
-				"disable_notification": true,
-			}
-			pPinBytes, err := json.Marshal(pinPayload)
-			if err != nil {
-				log.Println("تعذر تجهيز pinChatMessage:", err)
-				return
-			}
-			pinResp, err := httpClient.Post(pinUrl, "application/json", bytes.NewBuffer(pPinBytes))
-			if err != nil {
-				log.Println("خطأ pinChatMessage:", err)
-				return
-			}
-			defer pinResp.Body.Close()
-			var pinResult apiResult
-			if err := json.NewDecoder(pinResp.Body).Decode(&pinResult); err != nil {
-				log.Println("تعذر قراءة استجابة pinChatMessage")
-				return
-			}
-			if pinResp.StatusCode < http.StatusOK || pinResp.StatusCode >= http.StatusMultipleChoices || !pinResult.Ok {
-				log.Printf("فشل pinChatMessage (HTTP %d): %s", pinResp.StatusCode, pinResult.Description)
-			}
-		}
+		return true
 	}
+
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
+	payload := map[string]interface{}{
+		"chat_id": chatID,
+		"text":    cfgText,
+	}
+	pBytes, err := json.Marshal(payload)
+	if err != nil {
+		log.Println("تعذر تجهيز sendMessage لحفظ الإعدادات:", err)
+		return false
+	}
+	resp, err := httpClient.Post(apiURL, "application/json", bytes.NewBuffer(pBytes))
+	if err != nil {
+		log.Println("خطأ sendMessage (saveConfig):", err)
+		return false
+	}
+	defer resp.Body.Close()
+	var res struct {
+		Ok          bool   `json:"ok"`
+		Description string `json:"description"`
+		Result      struct {
+			MessageID int `json:"message_id"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		log.Println("خطأ فك تشفير sendMessage:", err)
+		return false
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !res.Ok {
+		log.Printf("فشل sendMessage لحفظ الإعدادات (HTTP %d): %s", resp.StatusCode, res.Description)
+		return false
+	}
+	if res.Result.MessageID == 0 {
+		log.Println("لم يُرجع Telegram معرّف رسالة الإعدادات؛ تعذر تثبيتها")
+		return false
+	}
+
+	pinURL := fmt.Sprintf("https://api.telegram.org/bot%s/pinChatMessage", token)
+	pinPayload := map[string]interface{}{
+		"chat_id":              chatID,
+		"message_id":           res.Result.MessageID,
+		"disable_notification": true,
+	}
+	pPinBytes, err := json.Marshal(pinPayload)
+	if err != nil {
+		log.Println("تعذر تجهيز pinChatMessage:", err)
+		return false
+	}
+	pinResp, err := httpClient.Post(pinURL, "application/json", bytes.NewBuffer(pPinBytes))
+	if err != nil {
+		log.Println("خطأ pinChatMessage:", err)
+		return false
+	}
+	defer pinResp.Body.Close()
+	var pinResult apiResult
+	if err := json.NewDecoder(pinResp.Body).Decode(&pinResult); err != nil {
+		log.Println("تعذر قراءة استجابة pinChatMessage")
+		return false
+	}
+	if pinResp.StatusCode < http.StatusOK || pinResp.StatusCode >= http.StatusMultipleChoices || !pinResult.Ok {
+		log.Printf("فشل pinChatMessage (HTTP %d): %s", pinResp.StatusCode, pinResult.Description)
+		return false
+	}
+	return true
 }
 
 // ============== إرسال الرسائل والقوائم ==============
