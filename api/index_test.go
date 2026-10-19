@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -98,5 +99,22 @@ func TestSplitTelegramTextEmptyInput(t *testing.T) {
 	chunks := splitTelegramText("", 3900)
 	if len(chunks) != 1 || chunks[0] != "" {
 		t.Fatalf("expected one empty chunk, got %#v", chunks)
+	}
+}
+
+func TestEscapeMarkdownV1(t *testing.T) {
+	input := "a_b*c`d[e\\f"
+	want := "a\\_b\\*c\\`d\\[e\\\\f"
+	if got := escapeMarkdownV1(input); got != want {
+		t.Fatalf("escapeMarkdownV1() = %q, want %q", got, want)
+	}
+}
+
+func TestIsTelegramFormattingError(t *testing.T) {
+	if !isTelegramFormattingError(errors.New("Bad Request: can't parse entities")) {
+		t.Fatal("expected Markdown parsing errors to be recognized")
+	}
+	if isTelegramFormattingError(errors.New("network timeout")) {
+		t.Fatal("network errors must not be retried as plain text")
 	}
 }
