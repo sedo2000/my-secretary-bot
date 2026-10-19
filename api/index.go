@@ -709,9 +709,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			sendMediaMenu(botToken, adminID, lang)
 
 		case "media_text":
-			config.ReplyType = "text"
-			config.ReplyFileID = ""
-			config.ReplyCaption = ""
+			// احتفظ بإعداد الوسائط الحالي حتى يؤكد المستخدم النص الجديد.
+			config.PendingReplyPreview = ""
 			config.State = "waiting_text"
 			saveConfig(botToken, adminID, config, msgID)
 			sendSubMenu(botToken, adminID, lang, tr(lang, "edit_text_prompt"))
