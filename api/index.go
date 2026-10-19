@@ -830,6 +830,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				sendMenu(botToken, adminID, lang, "لا توجد معاينة ذكية قابلة للتعديل.")
 				break
 			}
+			deleteMessage(botToken, cb.Message.Chat.ID, cb.Message.MessageID)
 			config.State = "waiting_smart_edit"
 			if !saveConfig(botToken, adminID, config, msgID) {
 				sendMenu(botToken, adminID, lang, "تعذر بدء تعديل الرد.")
