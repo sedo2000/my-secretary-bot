@@ -1550,8 +1550,15 @@ func getConfig(token string, chatID int64) (BotConfig, int) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		log.Printf("getChat أعاد HTTP %d", resp.StatusCode)
+		return defaultCfg, 0
+	}
+
 	var res struct {
-		Result struct {
+		Ok          bool   `json:"ok"`
+		Description string `json:"description"`
+		Result      struct {
 			PinnedMessage struct {
 				MessageID int    `json:"message_id"`
 				Text      string `json:"text"`
@@ -1561,6 +1568,10 @@ func getConfig(token string, chatID int64) (BotConfig, int) {
 
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		log.Println("خطأ فك تشفير getChat:", err)
+		return defaultCfg, 0
+	}
+	if !res.Ok {
+		log.Printf("فشل getChat: %s", res.Description)
 		return defaultCfg, 0
 	}
 
@@ -1594,9 +1605,24 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 			"message_id": pinnedMsgID,
 			"text":       cfgText,
 		}
-		pBytes, _ := json.Marshal(payload)
-		if _, err := httpClient.Post(url, "application/json", bytes.NewBuffer(pBytes)); err != nil {
+		pBytes, err := json.Marshal(payload)
+		if err != nil {
+			log.Println("تعذر تجهيز editMessageText:", err)
+			return
+		}
+		resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(pBytes))
+		if err != nil {
 			log.Println("خطأ editMessageText:", err)
+			return
+		}
+		defer resp.Body.Close()
+		var result apiResult
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			log.Println("تعذر قراءة استجابة editMessageText")
+			return
+		}
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
+			log.Printf("فشل editMessageText (HTTP %d): %s", resp.StatusCode, result.Description)
 		}
 	} else {
 		url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
@@ -1612,12 +1638,18 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 		}
 		defer resp.Body.Close()
 		var res struct {
-			Result struct {
+			Ok          bool   `json:"ok"`
+			Description string `json:"description"`
+			Result      struct {
 				MessageID int `json:"message_id"`
 			} `json:"result"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 			log.Println("خطأ فك تشفير sendMessage:", err)
+			return
+		}
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !res.Ok {
+			log.Printf("فشل sendMessage لحفظ الإعدادات (HTTP %d): %s", resp.StatusCode, res.Description)
 			return
 		}
 		if res.Result.MessageID != 0 {
@@ -1627,9 +1659,24 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) {
 				"message_id":           res.Result.MessageID,
 				"disable_notification": true,
 			}
-			pPinBytes, _ := json.Marshal(pinPayload)
-			if _, err := httpClient.Post(pinUrl, "application/json", bytes.NewBuffer(pPinBytes)); err != nil {
+			pPinBytes, err := json.Marshal(pinPayload)
+			if err != nil {
+				log.Println("تعذر تجهيز pinChatMessage:", err)
+				return
+			}
+			pinResp, err := httpClient.Post(pinUrl, "application/json", bytes.NewBuffer(pPinBytes))
+			if err != nil {
 				log.Println("خطأ pinChatMessage:", err)
+				return
+			}
+			defer pinResp.Body.Close()
+			var pinResult apiResult
+			if err := json.NewDecoder(pinResp.Body).Decode(&pinResult); err != nil {
+				log.Println("تعذر قراءة استجابة pinChatMessage")
+				return
+			}
+			if pinResp.StatusCode < http.StatusOK || pinResp.StatusCode >= http.StatusMultipleChoices || !pinResult.Ok {
+				log.Printf("فشل pinChatMessage (HTTP %d): %s", pinResp.StatusCode, pinResult.Description)
 			}
 		}
 	}
