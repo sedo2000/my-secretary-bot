@@ -2213,8 +2213,11 @@ func downloadTelegramFile(token, fileID string) ([]byte, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		return nil, fmt.Errorf("رد غير متوقع")
 	}
-	if !res.Ok || res.Result.FilePath == "" {
-		return nil, fmt.Errorf(res.Description)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !res.Ok || res.Result.FilePath == "" {
+		if res.Description == "" {
+			res.Description = "تعذر الحصول على مسار الملف"
+		}
+		return nil, fmt.Errorf("%s", res.Description)
 	}
 
 	fileURL := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", token, res.Result.FilePath)
@@ -2223,10 +2226,17 @@ func downloadTelegramFile(token, fileID string) ([]byte, error) {
 		return nil, fmt.Errorf("تعذر تنزيل الملف")
 	}
 	defer fResp.Body.Close()
+	if fResp.StatusCode < http.StatusOK || fResp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("فشل تنزيل الملف (HTTP %d)", fResp.StatusCode)
+	}
 
-	data, err := io.ReadAll(fResp.Body)
+	const maxTelegramFileBytes = 50 << 20
+	data, err := io.ReadAll(io.LimitReader(fResp.Body, maxTelegramFileBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("تعذر قراءة البيانات")
+	}
+	if len(data) > maxTelegramFileBytes {
+		return nil, fmt.Errorf("حجم الملف أكبر من الحد المسموح")
 	}
 	return data, nil
 }
@@ -2269,16 +2279,22 @@ func postMultipartBusinessAPI(token, method string, fields map[string]string, fi
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		return fmt.Errorf("رد غير متوقع")
 	}
-	if !res.Ok {
-		return fmt.Errorf(res.Description)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !res.Ok {
+		if res.Description == "" {
+			res.Description = "استجابة غير ناجحة"
+		}
+		return fmt.Errorf("فشل طلب Telegram (HTTP %d): %s", resp.StatusCode, res.Description)
 	}
 	return nil
 }
 
 func callBusinessAPI(token, method string, payload map[string]interface{}) error {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/%s", token, method)
-	b, _ := json.Marshal(payload)
-	resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(b))
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/%s", token, method)
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("تعذر تجهيز طلب Telegram")
+	}
+	resp, err := httpClient.Post(apiURL, "application/json", bytes.NewBuffer(b))
 	if err != nil {
 		return fmt.Errorf("تعذر الاتصال بتليجرام")
 	}
@@ -2286,10 +2302,13 @@ func callBusinessAPI(token, method string, payload map[string]interface{}) error
 
 	var res apiResult
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return fmt.Errorf("رد غير متوقع")
+		return fmt.Errorf("رد غير متوقع من Telegram")
 	}
-	if !res.Ok {
-		return fmt.Errorf(res.Description)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !res.Ok {
+		if res.Description == "" {
+			res.Description = "استجابة غير ناجحة"
+		}
+		return fmt.Errorf("فشل طلب Telegram (HTTP %d): %s", resp.StatusCode, res.Description)
 	}
 	return nil
 }
@@ -2398,12 +2417,46 @@ func publishBatchStories(token, businessConnID string, items []StoryItem, lang s
 
 func deleteMessage(token string, chatID int64, msgID int) {
 	payload := map[string]interface{}{"chat_id": chatID, "message_id": msgID}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/deleteMessage", "application/json", bytes.NewBuffer(b))
+	b, err := json.Marshal(payload)
+	if err != nil {
+		log.Println("تعذر تجهيز deleteMessage:", err)
+		return
+	}
+	resp, err := httpClient.Post("https://api.telegram.org/bot"+token+"/deleteMessage", "application/json", bytes.NewBuffer(b))
+	if err != nil {
+		log.Println("تعذر إرسال deleteMessage:", err)
+		return
+	}
+	defer resp.Body.Close()
+	var result apiResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Println("تعذر قراءة استجابة deleteMessage")
+		return
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
+		log.Printf("فشل deleteMessage (HTTP %d): %s", resp.StatusCode, result.Description)
+	}
 }
 
 func answerCallback(token, callbackID string) {
 	payload := map[string]string{"callback_query_id": callbackID}
-	b, _ := json.Marshal(payload)
-	httpClient.Post("https://api.telegram.org/bot"+token+"/answerCallbackQuery", "application/json", bytes.NewBuffer(b))
+	b, err := json.Marshal(payload)
+	if err != nil {
+		log.Println("تعذر تجهيز answerCallbackQuery:", err)
+		return
+	}
+	resp, err := httpClient.Post("https://api.telegram.org/bot"+token+"/answerCallbackQuery", "application/json", bytes.NewBuffer(b))
+	if err != nil {
+		log.Println("تعذر إرسال answerCallbackQuery:", err)
+		return
+	}
+	defer resp.Body.Close()
+	var result apiResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Println("تعذر قراءة استجابة answerCallbackQuery")
+		return
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !result.Ok {
+		log.Printf("فشل answerCallbackQuery (HTTP %d): %s", resp.StatusCode, result.Description)
+	}
 }
