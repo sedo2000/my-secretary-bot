@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -51,6 +52,41 @@ func isSubscriptionCallback(data string) bool {
 
 func subscriptionActive(config BotConfig) bool {
 	return config.SubscriptionUntil > time.Now().Unix()
+}
+
+func ownerTelegramID() int64 {
+	id, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("OWNER_TELEGRAM_ID")), 10, 64)
+	if err != nil || id <= 0 {
+		return 0
+	}
+	return id
+}
+
+func isOwnerTelegramID(userID int64) bool {
+	ownerID := ownerTelegramID()
+	return ownerID > 0 && userID == ownerID
+}
+
+// hasPremiumAccess grants access to the configured owner, explicitly exempted
+// users, or users with an active paid subscription.
+func hasPremiumAccess(token string, userID int64, config BotConfig) bool {
+	if isOwnerTelegramID(userID) || subscriptionActive(config) {
+		return true
+	}
+	ownerID := ownerTelegramID()
+	if ownerID == 0 || userID <= 0 {
+		return false
+	}
+	ownerConfig, msgID := getConfig(token, ownerID)
+	if msgID < 0 {
+		return false
+	}
+	for _, exemptID := range ownerConfig.ExemptedSubscriptionIDs {
+		if exemptID == userID {
+			return true
+		}
+	}
+	return false
 }
 
 func subscriptionPayload(userID int64, days int) string {
