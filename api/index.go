@@ -678,7 +678,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if update.CallbackQuery != nil {
 		cb := update.CallbackQuery
 		answerCallback(botToken, cb.ID)
-		if cb.Message == nil {
+		if cb.Message.Chat.ID == 0 || cb.Message.MessageID == 0 {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
