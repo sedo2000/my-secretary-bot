@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	defaultForcedChannel = "@slf00"
 	defaultOpenRouterModel = "openrouter/free"
 )
 
@@ -106,18 +105,14 @@ func generateSmartReply(customerMessage string) (string, error) {
 	if reply == "" {
 		return "", fmt.Errorf("عاد اقتراح الذكاء الاصطناعي فارغاً")
 	}
-	if len([]rune(reply)) > 3800 {
-		reply = string([]rune(reply)[:3800])
+	if len([]rune(reply)) > 2500 {
+		reply = string([]rune(reply)[:2500])
 	}
 	return reply, nil
 }
 
 func forcedSubscriptionChannel() string {
-	channel := strings.TrimSpace(os.Getenv("FORCE_SUBSCRIPTION_CHANNEL"))
-	if channel == "" {
-		return defaultForcedChannel
-	}
-	return channel
+	return strings.TrimSpace(os.Getenv("FORCE_SUBSCRIPTION_CHANNEL"))
 }
 
 func isMemberStatus(status string, isMember bool) bool {
@@ -133,6 +128,9 @@ func isMemberStatus(status string, isMember bool) bool {
 
 func isUserSubscribed(botToken string, userID int64) (bool, error) {
 	channel := forcedSubscriptionChannel()
+	if channel == "" {
+		return true, nil
+	}
 	values := url.Values{}
 	values.Set("chat_id", channel)
 	values.Set("user_id", fmt.Sprintf("%d", userID))
@@ -237,8 +235,8 @@ func sendSmartReplyMenu(token string, chatID int64, lang string, cfg BotConfig, 
 }
 
 func sendSmartReplyPreview(token string, adminID int64, customerChatID int64, customerName, reply string) {
-	if len([]rune(reply)) > 3600 {
-		reply = string([]rune(reply)[:3600]) + "…"
+	if len([]rune(reply)) > 2300 {
+		reply = string([]rune(reply)[:2300]) + "…"
 	}
 	text := "👁️ معاينة رد Nerd الذكي\nلن يُرسل الرد للعميل إلا بعد موافقتك.\n\n👤 العميل: " + customerName +
 		fmt.Sprintf("\n🆔 المحادثة: %d\n\n", customerChatID) + reply
