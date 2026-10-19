@@ -1395,9 +1395,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		if config.ReplyType != "" && config.ReplyType != "text" && config.ReplyFileID != "" {
 			caption := config.ReplyCaption
 			if caption != "" {
-				caption = strings.ReplaceAll(caption, "{name}", customerName)
-				caption = strings.ReplaceAll(caption, "{الاسم}", customerName)
-				caption = strings.ReplaceAll(caption, "$name", customerName)
+				safeCaptionName := escapeMarkdownV1(customerName)
+				caption = strings.ReplaceAll(caption, "{name}", safeCaptionName)
+				caption = strings.ReplaceAll(caption, "{الاسم}", safeCaptionName)
+				caption = strings.ReplaceAll(caption, "$name", safeCaptionName)
 
 				if detectedLang != "" && detectedLang != "ar" {
 					if translatedCaption, _, err := translateText(caption, detectedLang); err == nil && translatedCaption != "" {
@@ -2027,6 +2028,21 @@ func sendBusinessMediaReply(token string, chatID int64, mediaType, fileID, capti
 		return fmt.Errorf("تعذر قراءة استجابة وسائط الرد")
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || !res.Ok {
+		if payload["parse_mode"] == "Markdown" && isTelegramFormattingError(fmt.Errorf("%s", res.Description)) {
+			delete(payload, "parse_mode")
+			retryBody, marshalErr := json.Marshal(payload)
+			if marshalErr == nil {
+				retryResp, retryErr := mediaClient.Post("https://api.telegram.org/bot"+token+"/"+method, "application/json", bytes.NewBuffer(retryBody))
+				if retryErr == nil {
+					defer retryResp.Body.Close()
+					var retryResult apiResult
+					if json.NewDecoder(retryResp.Body).Decode(&retryResult) == nil &&
+						retryResp.StatusCode >= http.StatusOK && retryResp.StatusCode < http.StatusMultipleChoices && retryResult.Ok {
+						return nil
+					}
+				}
+			}
+		}
 		if res.Description == "" {
 			res.Description = "استجابة غير ناجحة"
 		}
