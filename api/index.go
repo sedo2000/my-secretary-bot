@@ -1705,7 +1705,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			suggestedReply, aiErr := generateSmartReply(msg.Text)
 			if aiErr != nil {
 				log.Printf("تعذر إنشاء رد ذكي للمحادثة %d: %v", customerChatID, aiErr)
-				sendMessage(botToken, adminID, "⚠️ تعذر إنشاء الرد الذكي؛ لم يتم إرسال رد للعميل.")
+				sendMessage(botToken, adminID, fmt.Sprintf("⚠️ تعذر إنشاء الرد الذكي؛ لم يتم إرسال رد للعميل.\nالسبب: %s", aiErr))
 				w.WriteHeader(http.StatusOK)
 				return
 			}
