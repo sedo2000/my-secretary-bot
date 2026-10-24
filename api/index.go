@@ -778,17 +778,25 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		lang := config.Lang
 
 		switch cb.Data {
-		case "manage_subscription_exemptions":
-			if !isOwnerTelegramID(adminID) {
-				sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط.")
-				break
-			}
+		case "manage_subscription_exemptions", "exemptions_menu":
+			if !isOwnerTelegramID(adminID) { sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط."); break }
+			sendSubscriptionExemptionsMenu(botToken, adminID, config.ExemptedSubscriptionIDs)
+		case "exempt_add":
+			if !isOwnerTelegramID(adminID) { sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط."); break }
 			config.State = "waiting_subscription_exempt_id"
-			if !saveConfig(botToken, adminID, config, msgID) {
-				sendMessage(botToken, adminID, "تعذر حفظ الحالة. حاول مجددًا.")
-				break
-			}
-			sendMessage(botToken, adminID, "👑 أرسل الآن Telegram user ID للشخص الذي تريد إعفاءه من الاشتراك. أرسل أرقامًا فقط.")
+			if !saveConfig(botToken, adminID, config, msgID) { sendMessage(botToken, adminID, "تعذر حفظ الحالة. حاول مجددًا."); break }
+			sendMessage(botToken, adminID, "👑 أرسل Telegram user ID للشخص الذي تريد إعفاءه من الاشتراك. أرسل أرقامًا فقط.")
+		case "exempt_remove":
+			if !isOwnerTelegramID(adminID) { sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط."); break }
+			config.State = "waiting_subscription_unexempt_id"
+			if !saveConfig(botToken, adminID, config, msgID) { sendMessage(botToken, adminID, "تعذر حفظ الحالة. حاول مجددًا."); break }
+			sendMessage(botToken, adminID, "🗑️ أرسل آيدي المستخدم الذي تريد حذف إعفاءه.")
+		case "exempt_list":
+			if !isOwnerTelegramID(adminID) { sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط."); break }
+			sendSubscriptionExemptionsList(botToken, adminID, config.ExemptedSubscriptionIDs)
+		case "exempt_stats":
+			if !isOwnerTelegramID(adminID) { sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط."); break }
+			sendMessage(botToken, adminID, fmt.Sprintf("📊 إحصائيات الإعفاءات\nعدد المستخدمين المعفيين: %d", len(config.ExemptedSubscriptionIDs)))
 		case "plans":
 			sendSubscriptionMenu(botToken, adminID, "")
 		case "subscription_status":
@@ -1230,6 +1238,18 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			sendMessage(botToken, chatID, "للدعم بشأن الدفع، أرسل رسالة إلى مسؤول Nerd مع إيصال Telegram Stars ومعرّف العملية. لا ترسل رموز تسجيل الدخول أو بيانات حساسة.")
 			w.WriteHeader(http.StatusOK)
 			return
+		}
+		if config.State == "waiting_subscription_unexempt_id" && isOwnerTelegramID(msg.From.ID) && msg.Chat.Type == "private" {
+			targetID, parseErr := strconv.ParseInt(strings.TrimSpace(msg.Text), 10, 64)
+			if parseErr != nil || targetID <= 0 { sendMessage(botToken, chatID, "❌ المعرّف غير صحيح. أرسل أرقامًا فقط."); w.WriteHeader(http.StatusOK); return }
+			updated := make([]int64, 0, len(config.ExemptedSubscriptionIDs))
+			removed := false
+			for _, id := range config.ExemptedSubscriptionIDs { if id == targetID { removed = true; continue }; updated = append(updated, id) }
+			config.ExemptedSubscriptionIDs = updated
+			config.State = ""
+			if !saveConfig(botToken, chatID, config, msgID) { sendMessage(botToken, chatID, "⚠️ تعذر حفظ التغيير؛ حاول مرة أخرى.") } else if removed { sendMessage(botToken, chatID, fmt.Sprintf("✅ تم حذف إعفاء المستخدم %d.", targetID)) } else { sendMessage(botToken, chatID, fmt.Sprintf("ℹ️ المستخدم %d غير موجود في قائمة المعفيين.", targetID)) }
+			sendSubscriptionExemptionsMenu(botToken, chatID, config.ExemptedSubscriptionIDs)
+			w.WriteHeader(http.StatusOK); return
 		}
 		if config.State == "waiting_subscription_exempt_id" && isOwnerTelegramID(msg.From.ID) && msg.Chat.Type == "private" {
 			idText := strings.TrimSpace(msg.Text)
@@ -2113,6 +2133,27 @@ func sendUserShareKeyboard(token string, chatID int64, lang string) {
 	}
 }
 
+func sendSubscriptionExemptionsMenu(token string, chatID int64, ids []int64) {
+	keyboard := map[string]interface{}{"inline_keyboard": [][]map[string]interface{}{
+		{{"text": "➕ إعفاء مستخدم بالآيدي", "callback_data": "exempt_add", "style": "success"}},
+		{{"text": "➖ حذف إعفاء بالآيدي", "callback_data": "exempt_remove", "style": "danger"}},
+		{{"text": "📋 قائمة المعفيين", "callback_data": "exempt_list", "style": "primary"}},
+		{{"text": "📊 إحصائيات المعفيين", "callback_data": "exempt_stats", "style": "primary"}},
+		{{"text": "🔙 رجوع", "callback_data": "main_menu", "style": "primary"}},
+	}}
+	if _, err := postTelegramJSON(token, "sendMessage", map[string]interface{}{"chat_id": chatID, "text": "👑 إدارة إعفاءات الاشتراك", "reply_markup": keyboard}); err != nil { log.Printf("فشل إرسال قائمة الإعفاءات: %v", err) }
+}
+
+func sendSubscriptionExemptionsList(token string, chatID int64, ids []int64) {
+	if len(ids) == 0 { sendMessage(token, chatID, "📋 لا يوجد مستخدمون معفيون حاليًا."); return }
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("📋 قائمة المعفيين (%d):\n", len(ids)))
+	for _, id := range ids { b.WriteString(fmt.Sprintf("• %d\n", id)) }
+	text := b.String()
+	for len([]rune(text)) > 3800 { text = string([]rune(text)[:3800]) }
+	sendMessage(token, chatID, text)
+}
+
 func sendMenu(token string, chatID int64, lang, text string) {
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
@@ -2146,7 +2187,7 @@ func sendMenu(token string, chatID int64, lang, text string) {
 	}
 	if isOwnerTelegramID(chatID) {
 		rows := keyboard["inline_keyboard"].([][]map[string]interface{})
-		keyboard["inline_keyboard"] = append(rows, []map[string]interface{}{{"text": "👑 إعفاء مستخدم من الاشتراك", "callback_data": "manage_subscription_exemptions", "style": "primary"}})
+		keyboard["inline_keyboard"] = append(rows, []map[string]interface{}{{"text": "👑 إدارة الإعفاءات", "callback_data": "exemptions_menu", "style": "primary"}})
 	}
 
 	payload := map[string]interface{}{
