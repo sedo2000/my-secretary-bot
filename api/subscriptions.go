@@ -194,7 +194,7 @@ func sendSubscriptionStatus(token string, chatID int64, config BotConfig) {
 	}
 	remaining := time.Until(time.Unix(config.SubscriptionUntil, 0))
 	days := int((remaining + 24*time.Hour - 1) / (24 * time.Hour))
-	text := fmt.Sprintf("✅ اشتراك Nerd Premium فعّال.\n⏳ متبقٍ نحو %d يومًا.\n📅 ينتهي في: %s (UTC)", days, time.Unix(config.SubscriptionUntil, 0).UTC().Format("2006-01-02 15:04"))
+	text := fmt.Sprintf("✅ اشتراك نشر الستوريات فعّال.\n⏳ متبقٍ نحو %d يومًا.\n📅 ينتهي في: %s (UTC)", days, time.Unix(config.SubscriptionUntil, 0).UTC().Format("2006-01-02 15:04"))
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
 			{{"text": "➕ تمديد الاشتراك", "callback_data": "plans"}},
