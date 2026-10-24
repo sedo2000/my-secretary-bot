@@ -424,6 +424,10 @@ type BotConfig struct {
 	PendingSmartBusinessConnID string `json:"pending_smart_business_conn_id,omitempty"`
 	PendingSmartCustomerName   string `json:"pending_smart_customer_name,omitempty"`
 	SubscriptionUntil           int64    `json:"subscription_until,omitempty"`
+	TrialStartedAt              int64    `json:"trial_started_at,omitempty"`
+	TrialUntil                  int64    `json:"trial_until,omitempty"`
+	TrialReminderSent           bool     `json:"trial_reminder_sent,omitempty"`
+	TrialExpiredNoticeSent      bool     `json:"trial_expired_notice_sent,omitempty"`
 	ProcessedStarChargeIDs      []string `json:"processed_star_charge_ids,omitempty"`
 	ExemptedSubscriptionIDs     []int64  `json:"exempted_subscription_ids,omitempty"`
 }
@@ -767,8 +771,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		if !hasPremiumAccess(botToken, adminID, config) && !isSubscriptionCallback(cb.Data) {
-			sendSubscriptionMenu(botToken, adminID, "🔒 ميزات الإدارة متاحة للمشتركين فقط.")
+		// تبقى ميزات البوت متاحة بعد التجربة؛ الدفع مطلوب لنشر الستوريات فقط.
+		if !canUseStoryPublishing(botToken, adminID, config) && isPaidStoryCallback(cb.Data) {
+			sendSubscriptionMenu(botToken, adminID, "🔒 انتهت التجربة المجانية. اختر باقة لفتح نشر الستوري والستوريات المتعددة.")
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -802,7 +807,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			sendSubscriptionMenu(botToken, adminID, "")
 		case "subscription_status":
 			sendSubscriptionStatus(botToken, adminID, config)
-		case "buy_14", "buy_30", "buy_180":
+		case "buy_30", "buy_90", "buy_180":
 			days, ok := planDaysForCallback(cb.Data)
 			if !ok {
 				sendSubscriptionMenu(botToken, adminID, "الباقة غير معروفة.")
@@ -1064,6 +1069,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		// ===== قائمة الستوريات المتعددة =====
 		case "batch_story_menu":
+			if !canUseStoryPublishing(botToken, adminID, config) {
+				sendSubscriptionMenu(botToken, adminID, "🔒 انتهت التجربة المجانية. اختر باقة لفتح نشر الستوريات المتعددة.")
+				break
+			}
 			config.State = ""
 			saveConfig(botToken, adminID, config, msgID)
 			storyBatchMu.Lock()
@@ -1072,6 +1081,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			sendBatchStoryMenu(botToken, adminID, lang, count)
 
 		case "batch_add":
+			if !canUseStoryPublishing(botToken, adminID, config) {
+				sendSubscriptionMenu(botToken, adminID, "🔒 انتهت التجربة المجانية. اختر باقة لفتح نشر الستوريات المتعددة.")
+				break
+			}
 			if config.BusinessConnID == "" {
 				sendMenu(botToken, adminID, lang, tr(lang, "no_business_connection"))
 				break
@@ -1081,6 +1094,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			sendSubMenu(botToken, adminID, lang, tr(lang, "batch_story_prompt"))
 
 		case "batch_list":
+			if !canUseStoryPublishing(botToken, adminID, config) {
+				sendSubscriptionMenu(botToken, adminID, "🔒 انتهت التجربة المجانية. اختر باقة لفتح نشر الستوريات المتعددة.")
+				break
+			}
 			storyBatchMu.Lock()
 			items := storyBatch[adminID]
 			storyBatchMu.Unlock()
@@ -1102,6 +1119,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			sendSubMenu(botToken, adminID, lang, txt)
 
 		case "batch_clear":
+			if !canUseStoryPublishing(botToken, adminID, config) {
+				sendSubscriptionMenu(botToken, adminID, "🔒 انتهت التجربة المجانية. اختر باقة لفتح نشر الستوريات المتعددة.")
+				break
+			}
 			storyBatchMu.Lock()
 			storyBatch[adminID] = []StoryItem{}
 			storyBatchMu.Unlock()
@@ -1110,6 +1131,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			sendBatchStoryMenu(botToken, adminID, lang, 0)
 
 		case "batch_publish":
+			if !canUseStoryPublishing(botToken, adminID, config) {
+				sendSubscriptionMenu(botToken, adminID, "🔒 انتهت التجربة المجانية. اختر باقة لفتح نشر الستوريات المتعددة.")
+				break
+			}
 			storyBatchMu.Lock()
 			items := storyBatch[adminID]
 			storyBatchMu.Unlock()
@@ -1244,6 +1269,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		lang := config.Lang
+		newTrial := ensureFreeTrial(&config)
+		if newTrial {
+			if !saveConfig(botToken, chatID, config, msgID) { w.WriteHeader(http.StatusOK); return }
+		}
+		sendTrialNotice(botToken, chatID, &config, msgID, newTrial)
 
 		// Telegram sends successful_payment only after the charge is confirmed.
 		if msg.SuccessfulPayment != nil {
@@ -1306,11 +1336,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		if !hasPremiumAccess(botToken, msg.From.ID, config) && msg.Text != "/start" {
-			sendSubscriptionMenu(botToken, chatID, "🔒 انتهى اشتراكك أو لم تشترك بعد. اختر باقة لتفعيل ميزات الإدارة.")
-			w.WriteHeader(http.StatusOK)
-			return
-		}
 
 		if strings.TrimSpace(msg.Text) == "بوت" || strings.Contains(msg.Text, "بوت") {
 			sendNerdBotInfo(botToken, chatID)
@@ -1334,13 +1359,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if msg.Text == "/start" {
-			sendStartPhoto(botToken, chatID, lang)
-			if hasPremiumAccess(botToken, msg.From.ID, config) {
-				sendMenu(botToken, chatID, lang, tr(lang, "main_menu_title"))
-				sendUserShareKeyboard(botToken, chatID, lang)
-			} else {
-				sendSubscriptionMenu(botToken, chatID, "ابدأ باختيار باقة لتفعيل ميزات Nerd.")
+			newTrial := ensureFreeTrial(&config)
+			if newTrial && !saveConfig(botToken, chatID, config, msgID) {
+				sendMessage(botToken, chatID, "⚠️ تعذر حفظ بداية التجربة المجانية. أرسل /start مرة أخرى.")
+				w.WriteHeader(http.StatusOK)
+				return
 			}
+			sendStartPhoto(botToken, chatID, lang)
+			sendTrialNotice(botToken, chatID, &config, msgID, newTrial)
+			sendMenu(botToken, chatID, lang, tr(lang, "main_menu_title"))
+			sendUserShareKeyboard(botToken, chatID, lang)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -1563,6 +1591,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		} else if strings.HasPrefix(config.State, "waiting_story_") {
+			if !canUseStoryPublishing(botToken, msg.From.ID, config) {
+				config.State = ""
+				saveConfig(botToken, chatID, config, msgID)
+				sendSubscriptionMenu(botToken, chatID, "🔒 انتهت التجربة المجانية. اختر باقة لفتح نشر الستوري.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
 			period := strings.TrimPrefix(config.State, "waiting_story_")
 			if len(msg.Photo) == 0 && msg.Video == nil {
 				sendSubMenu(botToken, chatID, lang, tr(lang, "need_real_media_story"))
@@ -2189,6 +2224,15 @@ func sendSimpleSubmenu(token string, chatID int64, title string, rows [][]map[st
 	keyboard := map[string]interface{}{"inline_keyboard": rows}
 	if _, err := postTelegramJSON(token, "sendMessage", map[string]interface{}{"chat_id": chatID, "text": title, "reply_markup": keyboard}); err != nil {
 		log.Printf("فشل إرسال القائمة الفرعية: %v", err)
+	}
+}
+
+func isPaidStoryCallback(data string) bool {
+	switch data {
+	case "post_story", "batch_story_menu", "batch_add", "batch_list", "batch_clear", "batch_publish":
+		return true
+	default:
+		return false
 	}
 }
 
