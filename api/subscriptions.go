@@ -181,7 +181,15 @@ func sendSubscriptionMenu(token string, chatID int64, notice string) {
 
 func sendSubscriptionStatus(token string, chatID int64, config BotConfig) {
 	if !subscriptionActive(config) {
-		sendSubscriptionMenu(token, chatID, "📭 لا يوجد اشتراك فعّال حاليًا.")
+		if trialActive(config) {
+			remaining := time.Until(time.Unix(config.TrialUntil, 0))
+			days := int((remaining + 24*time.Hour - 1) / (24 * time.Hour))
+			baghdad := time.FixedZone("Asia/Baghdad", 3*60*60)
+			notice := fmt.Sprintf("🎁 تجربتك المجانية فعّالة وتشمل جميع الميزات.\\n⏳ المتبقي: نحو %d يومًا.\\n📅 تنتهي في: %s (توقيت بغداد).\\n\\nبعد انتهاء التجربة، الدفع مطلوب فقط لنشر الستوري والستوريات المتعددة.", days, time.Unix(config.TrialUntil, 0).In(baghdad).Format("2006-01-02 15:04"))
+			sendSubscriptionMenu(token, chatID, notice)
+		} else {
+			sendSubscriptionMenu(token, chatID, "📭 انتهت التجربة المجانية. ما زالت ميزات البوت متاحة، وتحتاج إلى باقة فقط لنشر الستوري والستوريات المتعددة.")
+		}
 		return
 	}
 	remaining := time.Until(time.Unix(config.SubscriptionUntil, 0))
