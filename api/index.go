@@ -814,6 +814,36 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		case "activation_guide":
 			sendActivationGuide(botToken, adminID, lang)
 
+		case "automation_menu":
+			sendSimpleSubmenu(botToken, adminID, "⚙️ إعدادات الردود", [][]map[string]interface{}{
+				{{"text": tr(lang, "stop_btn"), "callback_data": "stop", "style": "danger"}, {"text": tr(lang, "start_btn"), "callback_data": "start", "style": "success"}},
+				{{"text": tr(lang, "edit_text_btn"), "callback_data": "edit_text", "style": "primary"}},
+				{{"text": "🧠 الرد الذكي", "callback_data": "smart_reply_menu", "style": "success"}},
+				{{"text": tr(lang, "media_reply_btn"), "callback_data": "media_menu", "style": "success"}},
+				{{"text": tr(lang, "interaction_menu_btn"), "callback_data": "interaction_menu", "style": "primary"}},
+				{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "primary"}},
+			})
+		case "content_menu":
+			sendSimpleSubmenu(botToken, adminID, "📚 إدارة المحتوى", [][]map[string]interface{}{
+				{{"text": tr(lang, "batch_story_btn"), "callback_data": "batch_story_menu", "style": "success"}},
+				{{"text": tr(lang, "post_story_btn"), "callback_data": "post_story", "style": "primary"}},
+				{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "primary"}},
+			})
+		case "account_menu":
+			sendSimpleSubmenu(botToken, adminID, "👤 إدارة الحساب", [][]map[string]interface{}{
+				{{"text": tr(lang, "profile_menu_btn"), "callback_data": "profile_menu", "style": "primary"}},
+				{{"text": tr(lang, "exclude_btn"), "callback_data": "exclude", "style": "primary"}, {"text": tr(lang, "list_excluded_btn"), "callback_data": "list_excluded", "style": "primary"}},
+				{{"text": tr(lang, "clear_excluded_btn"), "callback_data": "clear_excluded", "style": "danger"}},
+				{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "primary"}},
+			})
+		case "tools_menu":
+			rows := [][]map[string]interface{}{
+				{{"text": "🛠️ طريقة تفعيل البوت", "callback_data": "activation_guide", "style": "primary"}},
+				{{"text": tr(lang, "id_copy_btn"), "copy_text": map[string]interface{}{"text": fmt.Sprintf("%d", adminID)}, "style": "primary"}},
+				{{"text": tr(lang, "lang_ar_btn"), "callback_data": "lang_ar", "style": "primary"}, {"text": tr(lang, "lang_en_btn"), "callback_data": "lang_en", "style": "primary"}},
+				{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "primary"}},
+			}
+			sendSimpleSubmenu(botToken, adminID, "🛠️ الأدوات والإعدادات", rows)
 		case "smart_reply_menu":
 			sendSmartReplyMenu(botToken, adminID, lang, config, "")
 
@@ -2154,37 +2184,23 @@ func sendSubscriptionExemptionsList(token string, chatID int64, ids []int64) {
 	sendMessage(token, chatID, text)
 }
 
+func sendSimpleSubmenu(token string, chatID int64, title string, rows [][]map[string]interface{}) {
+	keyboard := map[string]interface{}{"inline_keyboard": rows}
+	if _, err := postTelegramJSON(token, "sendMessage", map[string]interface{}{"chat_id": chatID, "text": title, "reply_markup": keyboard}); err != nil {
+		log.Printf("فشل إرسال القائمة الفرعية: %v", err)
+	}
+}
+
 func sendMenu(token string, chatID int64, lang, text string) {
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{
-				{"text": tr(lang, "stop_btn"), "callback_data": "stop", "style": "danger"},
-				{"text": tr(lang, "start_btn"), "callback_data": "start", "style": "success"},
-			},
-			{{"text": tr(lang, "edit_text_btn"), "callback_data": "edit_text", "style": "primary"}},
-			{{"text": "🧠 المحادثة الآلية الذكية", "callback_data": "smart_reply_menu", "style": "success"}},
-			{{"text": "🛠️ طريقة تفعيل البوت", "callback_data": "activation_guide", "style": "primary"}},
-			{{"text": tr(lang, "media_reply_btn"), "callback_data": "media_menu", "style": "success"}},
-			{{"text": tr(lang, "interaction_menu_btn"), "callback_data": "interaction_menu", "style": "success"}},
-			{{"text": tr(lang, "batch_story_btn"), "callback_data": "batch_story_menu", "style": "success"}},
-			{
-				{"text": tr(lang, "exclude_btn"), "callback_data": "exclude", "style": "primary"},
-				{"text": tr(lang, "list_excluded_btn"), "callback_data": "list_excluded", "style": "primary"},
-			},
-			{{"text": tr(lang, "clear_excluded_btn"), "callback_data": "clear_excluded", "style": "danger"}},
-			{{"text": tr(lang, "profile_menu_btn"), "callback_data": "profile_menu", "style": "primary"}},
-			{{"text": tr(lang, "post_story_btn"), "callback_data": "post_story", "style": "primary"}},
-			{{
-				"text": fmt.Sprintf("%s (%d)", tr(lang, "id_copy_btn"), chatID),
-				"copy_text": map[string]interface{}{"text": fmt.Sprintf("%d", chatID)},
-				"style":     "primary",
-			}},
-			{
-				{"text": tr(lang, "lang_ar_btn"), "callback_data": "lang_ar", "style": "primary"},
-				{"text": tr(lang, "lang_en_btn"), "callback_data": "lang_en", "style": "primary"},
-			},
+			{{"text": "⚙️ إعدادات الردود", "callback_data": "automation_menu", "style": "success"}},
+			{{"text": "📚 إدارة المحتوى", "callback_data": "content_menu", "style": "primary"}},
+			{{"text": "👤 إدارة الحساب", "callback_data": "account_menu", "style": "primary"}},
+			{{"text": "🛠️ الأدوات والإعدادات", "callback_data": "tools_menu", "style": "primary"}},
 		},
 	}
+
 	if isOwnerTelegramID(chatID) {
 		rows := keyboard["inline_keyboard"].([][]map[string]interface{})
 		keyboard["inline_keyboard"] = append(rows, []map[string]interface{}{{"text": "👑 إدارة الإعفاءات", "callback_data": "exemptions_menu", "style": "primary"}})
