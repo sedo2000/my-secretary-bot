@@ -1618,34 +1618,24 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// الرد الذكي ينشئ معاينة خاصة بالمشرف ولا يرسل شيئاً قبل الموافقة.
-		if config.SmartReplyEnabled && strings.TrimSpace(msg.Text) != "" {
-			if config.PendingSmartReply != "" || config.State == "waiting_smart_preview" || config.State == "waiting_smart_edit" {
-				sendMessage(botToken, adminID, "⚠️ توجد معاينة ذكية معلّقة. أرسلها أو عدّلها أو ألغها قبل إنشاء معاينة أخرى.")
-				w.WriteHeader(http.StatusOK)
-				return
-			}
+		// الرد الذكي التلقائي يعمل في المحادثات الخاصة فقط، دون معاينة أو موافقة.
+		if config.SmartReplyEnabled && msg.Chat.Type == "private" && strings.TrimSpace(msg.Text) != "" {
 			suggestedReply, aiErr := generateSmartReply(msg.Text)
 			if aiErr != nil {
-				sendMessage(botToken, adminID, "❌ تعذر إنشاء رد ذكي، ولم يُرسل أي رد تلقائي. التفاصيل: "+aiErr.Error())
+				log.Printf("تعذر إنشاء رد ذكي للمحادثة %d: %v", customerChatID, aiErr)
+				sendMessage(botToken, adminID, "⚠️ تعذر إنشاء الرد الذكي؛ لم يتم إرسال رد للعميل.")
 				w.WriteHeader(http.StatusOK)
 				return
 			}
-			config.PendingSmartReply = suggestedReply
-			config.PendingSmartChatID = customerChatID
-			config.PendingSmartBusinessConnID = msg.BusinessConnectionID
-			config.PendingSmartCustomerName = customerName
-			config.State = "waiting_smart_preview"
-			if !saveConfig(botToken, adminID, config, configMsgID) {
-				sendMessage(botToken, adminID, "❌ تعذر حفظ معاينة الرد الذكي. لم يُرسل رد إلى العميل.")
-				w.WriteHeader(http.StatusOK)
-				return
+			if err := callBusinessAPI(botToken, "sendMessage", map[string]interface{}{
+				"chat_id": customerChatID, "text": suggestedReply, "business_connection_id": msg.BusinessConnectionID,
+			}); err != nil {
+				log.Printf("فشل إرسال الرد الذكي للمحادثة %d: %v", customerChatID, err)
+				sendMessage(botToken, adminID, "⚠️ تم إنشاء الرد الذكي لكن تعذر إرساله للعميل.")
 			}
-			sendSmartReplyPreview(botToken, adminID, customerChatID, customerName, suggestedReply)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-
 		// نظام التهدئة
 		cooldownMu.Lock()
 		if userCooldowns[adminID] == nil {
