@@ -17,7 +17,7 @@ const (
 	defaultOpenRouterModel = "openrouter/free"
 )
 
-var aiHTTPClient = &http.Client{Timeout: 7 * time.Second}
+var aiHTTPClient = &http.Client{Timeout: 25 * time.Second}
 
 type openRouterRequest struct {
 	Model       string              `json:"model"`
@@ -81,15 +81,33 @@ func generateSmartReply(customerMessage string) (string, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Title", "Nerd Telegram Business Bot")
 
-	resp, err := aiHTTPClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("تعذر الاتصال بـ OpenRouter ضمن المهلة المحددة")
+	var resp *http.Response
+	for attempt := 0; attempt < 2; attempt++ {
+		resp, err = aiHTTPClient.Do(req)
+		if err != nil {
+			if attempt == 0 && req.GetBody != nil {
+				req.Body, _ = req.GetBody()
+				time.Sleep(300 * time.Millisecond)
+				continue
+			}
+			return "", fmt.Errorf("تعذر الاتصال بـ OpenRouter بعد محاولتين: %v", err)
+		}
+		// أعد المحاولة مرة واحدة عند حدود الاستخدام أو أخطاء الخادم المؤقتة.
+		if attempt == 0 && (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError) {
+			resp.Body.Close()
+			if req.GetBody != nil {
+				req.Body, _ = req.GetBody()
+			}
+			time.Sleep(400 * time.Millisecond)
+			continue
+		}
+		break
 	}
 	defer resp.Body.Close()
 
 	var result openRouterResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&result); err != nil {
-		return "", fmt.Errorf("تعذر قراءة استجابة OpenRouter")
+		return "", fmt.Errorf("تعذر قراءة استجابة OpenRouter: %v", err)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		message := "استجابة غير ناجحة"
