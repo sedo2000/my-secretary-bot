@@ -17,10 +17,10 @@ type starsPlan struct {
 
 func starsPlanForDays(days int) (starsPlan, bool) {
 	switch days {
-	case 14:
-		return starsPlan{Days: 14, Amount: 100, Label: "أسبوعان"}, true
 	case 30:
-		return starsPlan{Days: 30, Amount: 250, Label: "شهر"}, true
+		return starsPlan{Days: 30, Amount: 100, Label: "شهر"}, true
+	case 90:
+		return starsPlan{Days: 90, Amount: 250, Label: "3 أشهر"}, true
 	case 180:
 		return starsPlan{Days: 180, Amount: 500, Label: "6 أشهر"}, true
 	default:
@@ -30,10 +30,10 @@ func starsPlanForDays(days int) (starsPlan, bool) {
 
 func planDaysForCallback(data string) (int, bool) {
 	switch data {
-	case "buy_14":
-		return 14, true
 	case "buy_30":
 		return 30, true
+	case "buy_90":
+		return 90, true
 	case "buy_180":
 		return 180, true
 	default:
@@ -43,7 +43,7 @@ func planDaysForCallback(data string) (int, bool) {
 
 func isSubscriptionCallback(data string) bool {
 	switch data {
-	case "plans", "subscription_status", "buy_14", "buy_30", "buy_180":
+	case "plans", "subscription_status", "buy_30", "buy_90", "buy_180":
 		return true
 	default:
 		return false
@@ -116,19 +116,14 @@ func validStarsCheckout(userID int64, currency string, amount int, payload strin
 }
 
 func sendSubscriptionMenu(token string, chatID int64, notice string) {
-	text := "💎 Nerd Premium\n\n🔒 ميزات الإدارة مقفلة حتى تفعيل الاشتراك.\n\n" +
-		"اختر مدة الاشتراك وادفع باستخدام Telegram Stars:\n" +
-		"• أسبوعان — 100 ⭐\n" +
-		"• شهر — 250 ⭐\n" +
-		"• 6 أشهر — 500 ⭐\n\n" +
-		"بعد تأكيد الدفع من تيليجرام، تُفتح الميزات تلقائيًا."
+	text := "⭐ تفعيل نشر الستوريات\n\nتجربة مجانية لمدة 7 أيام تشمل جميع الميزات. بعد انتهائها، يبقى البوت متاحًا وتحتاج إلى باقة فقط لنشر ستوري أو نشر ستوريات متعددة.\n\nاختر باقة نشر الستوريات باستخدام Telegram Stars:\n• شهر — 100 ⭐\n• 3 أشهر — 250 ⭐\n• 6 أشهر — 500 ⭐\n\nبعد تأكيد الدفع من تيليجرام، تُفتح ميزات النشر المدفوعة تلقائيًا."
 	if notice != "" {
 		text = notice + "\n\n" + text
 	}
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "🗓️ أسبوعان · 100 ⭐", "callback_data": "buy_14"}},
-			{{"text": "📅 شهر · 250 ⭐", "callback_data": "buy_30"}},
+			{{"text": "📅 شهر · 100 ⭐", "callback_data": "buy_30"}},
+			{{"text": "🗓️ 3 أشهر · 250 ⭐", "callback_data": "buy_90"}},
 			{{"text": "👑 6 أشهر · 500 ⭐", "callback_data": "buy_180"}},
 			{{"text": "ℹ️ حالة اشتراكي", "callback_data": "subscription_status"}},
 		},
@@ -168,12 +163,12 @@ func sendStarsInvoice(token string, chatID int64, days int) error {
 	}
 	payload := subscriptionPayload(chatID, days)
 	prices := []map[string]interface{}{
-		{"label": "Nerd Premium · " + plan.Label, "amount": plan.Amount},
+		{"label": "نشر الستوريات · " + plan.Label, "amount": plan.Amount},
 	}
 	_, err := postTelegramJSON(token, "sendInvoice", map[string]interface{}{
 		"chat_id": chatID,
-		"title": "اشتراك Nerd Premium",
-		"description": fmt.Sprintf("تفعيل ميزات Nerd لمدة %d يومًا.", plan.Days),
+		"title": "تفعيل نشر الستوريات",
+		"description": fmt.Sprintf("فتح ميزات نشر الستوريات لمدة %d يومًا.", plan.Days),
 		"payload": payload,
 		"provider_token": "",
 		"currency": "XTR",
@@ -215,7 +210,7 @@ func applySuccessfulStarsPayment(token string, chatID int64, payment *Successful
 		config.ProcessedStarChargeIDs = oldCharges
 		return fmt.Errorf("could not persist subscription config")
 	}
-	sendMessage(token, chatID, fmt.Sprintf("🎉 تم تأكيد الدفع بنجاح!\n💎 باقة Nerd Premium: %s\n⏳ المدة: %d يومًا\n📅 تاريخ الانتهاء: %s (UTC)\n\nيمكنك الآن استخدام ميزات الإدارة.", plan.Label, plan.Days, time.Unix(config.SubscriptionUntil, 0).UTC().Format("2006-01-02 15:04")))
+	sendMessage(token, chatID, fmt.Sprintf("🎉 تم تأكيد الدفع بنجاح!\n💎 ميزة نشر الستوريات: %s\n⏳ المدة: %d يومًا\n📅 تاريخ الانتهاء: %s (UTC)\n\nتم فتح نشر الستوري والستوريات المتعددة.", plan.Label, plan.Days, time.Unix(config.SubscriptionUntil, 0).UTC().Format("2006-01-02 15:04")))
 	sendMenu(token, chatID, config.Lang, tr(config.Lang, "main_menu_title"))
 	return nil
 }
