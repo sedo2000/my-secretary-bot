@@ -1653,11 +1653,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		if !hasPremiumAccess(botToken, adminID, config) {
-			// أوقف كل أتمتة Business عند غياب الاشتراك أو انتهائه.
-			w.WriteHeader(http.StatusOK)
-			return
-		}
+		// تظل أتمتة Business والردود متاحة حتى بعد انتهاء التجربة؛ الدفع خاص بنشر الستوريات فقط.
 
 		if config.IsStopped {
 			w.WriteHeader(http.StatusOK)
