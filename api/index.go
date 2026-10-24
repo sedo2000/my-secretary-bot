@@ -830,7 +830,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "primary"}},
 			})
 		case "content_menu":
-			sendSimpleSubmenu(botToken, adminID, "📚 إدارة المحتوى", [][]map[string]interface{}{
+			sendSimpleSubmenu(botToken, adminID, "📸 نشر الستوريات - ستوري واحدة أو ستوريات متعددة", [][]map[string]interface{}{
 				{{"text": tr(lang, "batch_story_btn"), "callback_data": "batch_story_menu", "style": "success"}},
 				{{"text": tr(lang, "post_story_btn"), "callback_data": "post_story", "style": "primary"}},
 				{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "primary"}},
@@ -2239,10 +2239,9 @@ func isPaidStoryCallback(data string) bool {
 func sendMenu(token string, chatID int64, lang, text string) {
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "⚙️ إعدادات الردود", "callback_data": "automation_menu", "style": "success"}},
-			{{"text": "📚 إدارة المحتوى", "callback_data": "content_menu", "style": "primary"}},
-			{{"text": "👤 إدارة الحساب", "callback_data": "account_menu", "style": "primary"}},
-			{{"text": "🛠️ الأدوات والإعدادات", "callback_data": "tools_menu", "style": "primary"}},
+			{{"text": "⚙️ إعدادات الردود", "callback_data": "automation_menu", "style": "success"}, {"text": "📸 نشر الستوريات", "callback_data": "content_menu", "style": "primary"}},
+			{{"text": "👤 إدارة الحساب", "callback_data": "account_menu", "style": "primary"}, {"text": "🛠️ الإعدادات", "callback_data": "tools_menu", "style": "primary"}},
+			{{"text": "🎁 التجربة والاشتراك", "callback_data": "subscription_status", "style": "success"}},
 		},
 	}
 
