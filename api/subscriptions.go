@@ -15,6 +15,49 @@ type starsPlan struct {
 	Label  string
 }
 
+const trialDuration = 7 * 24 * time.Hour
+
+func ensureFreeTrial(config *BotConfig) bool {
+	if config.TrialStartedAt != 0 { return false }
+	now := time.Now()
+	config.TrialStartedAt = now.Unix()
+	config.TrialUntil = now.Add(trialDuration).Unix()
+	return true
+}
+
+func trialActive(config BotConfig) bool { return config.TrialUntil > time.Now().Unix() }
+
+func canUseStoryPublishing(token string, userID int64, config BotConfig) bool {
+	if isOwnerTelegramID(userID) || subscriptionActive(config) || trialActive(config) { return true }
+	ownerID := ownerTelegramID()
+	if ownerID <= 0 || userID <= 0 { return false }
+	ownerConfig, msgID := getConfig(token, ownerID)
+	if msgID < 0 { return false }
+	for _, exemptID := range ownerConfig.ExemptedSubscriptionIDs { if exemptID == userID { return true } }
+	return false
+}
+
+func trialWelcomeText(config BotConfig) string {
+	baghdad := time.FixedZone("Asia/Baghdad", 3*60*60)
+	return fmt.Sprintf("🎁 بدأت تجربتك المجانية لمدة 7 أيام وتشمل جميع ميزات البوت!\n📅 تنتهي في: %s (توقيت بغداد)\n\nبعد انتهاء التجربة، تبقى جميع الميزات متاحة باستثناء نشر ستوري ونشر ستوريات متعددة، ويمكن تفعيلهما بباقة Stars.", time.Unix(config.TrialUntil, 0).In(baghdad).Format("2006-01-02 15:04"))
+}
+
+func sendTrialNotice(token string, chatID int64, config *BotConfig, msgID int, newlyStarted bool) {
+	if newlyStarted { sendMessage(token, chatID, trialWelcomeText(*config)); return }
+	now := time.Now().Unix()
+	if config.TrialUntil == 0 { return }
+	if now >= config.TrialUntil && !config.TrialExpiredNoticeSent {
+		config.TrialExpiredNoticeSent = true
+		if saveConfig(token, chatID, *config, msgID) { sendMessage(token, chatID, "⏰ انتهت تجربتك المجانية لمدة 7 أيام. يمكنك مواصلة استخدام جميع ميزات البوت، أما نشر الستوري والستوريات المتعددة فيحتاج إلى باقة Stars.") }
+		return
+	}
+	if now < config.TrialUntil && config.TrialUntil-now <= 24*60*60 && !config.TrialReminderSent {
+		config.TrialReminderSent = true
+		baghdad := time.FixedZone("Asia/Baghdad", 3*60*60)
+		if saveConfig(token, chatID, *config, msgID) { sendMessage(token, chatID, fmt.Sprintf("⏳ تذكير: تنتهي تجربتك المجانية خلال أقل من 24 ساعة، بتاريخ %s (توقيت بغداد). بعد انتهائها، ستحتاج إلى Stars فقط لنشر الستوري والستوريات المتعددة.", time.Unix(config.TrialUntil, 0).In(baghdad).Format("2006-01-02 15:04"))) }
+	}
+}
+
 func starsPlanForDays(days int) (starsPlan, bool) {
 	switch days {
 	case 30:
