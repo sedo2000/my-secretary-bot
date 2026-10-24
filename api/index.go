@@ -467,7 +467,8 @@ type TelegramUpdate struct {
 type BusinessMessage struct {
 	MessageID int `json:"message_id"`
 	Chat      struct {
-		ID int64 `json:"id"`
+		ID   int64  `json:"id"`
+		Type string `json:"type"`
 	} `json:"chat"`
 	From struct {
 		ID        int64  `json:"id"`
