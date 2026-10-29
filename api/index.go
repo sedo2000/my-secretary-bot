@@ -756,8 +756,25 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	// ============ 1. معالجة الأزرار ============
 	if update.CallbackQuery != nil {
 		cb := update.CallbackQuery
+		log.Printf("استلام callback: data=%q from=%d chat=%d", cb.Data, cb.From.ID, cb.Message.Chat.ID)
 		answerCallback(botToken, cb.ID)
 		if cb.Message.Chat.ID == 0 || cb.Message.MessageID == 0 {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// هذه القوائم لا تحتاج إلى تحميل إعدادات المستخدم؛ عالجها أولاً حتى لا تتعطل بسبب فشل قراءة إعداداته المثبتة.
+		if cb.Message.Chat.ID == cb.From.ID && cb.Data == "owner_payments_menu" {
+			if !isOwnerTelegramID(cb.From.ID) {
+				sendMessage(botToken, cb.From.ID, "هذا الإجراء مخصص لمالك البوت فقط.")
+			} else {
+				sendOwnerPaymentsMenu(botToken, cb.From.ID)
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if cb.Message.Chat.ID == cb.From.ID && cb.Data == "plans" {
+			sendSubscriptionMenu(botToken, cb.From.ID, "")
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -782,6 +799,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		adminID := cb.From.ID
 		config, msgID := getConfig(botToken, adminID)
 		if msgID < 0 {
+			log.Printf("تعذر تحميل إعدادات المستخدم أثناء callback=%q user=%d", cb.Data, adminID)
+			sendMessage(botToken, adminID, "⚠️ تعذر قراءة إعدادات البوت حاليًا، لذلك لم أستطع تنفيذ هذا الزر. أعد المحاولة بعد قليل؛ وإذا تكررت الرسالة فسنحتاج إلى إصلاح رسالة الإعدادات المثبتة.")
 			w.WriteHeader(http.StatusOK)
 			return
 		}
