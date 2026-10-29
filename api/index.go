@@ -850,6 +850,18 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		case "exempt_stats":
 			if !isOwnerTelegramID(adminID) { sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط."); break }
 			sendMessage(botToken, adminID, fmt.Sprintf("📊 إحصائيات الإعفاءات\nعدد المستخدمين المعفيين: %d", len(config.ExemptedSubscriptionIDs)))
+		case "owner_test_subscription":
+			if !isOwnerTelegramID(adminID) {
+				sendMessage(botToken, adminID, "هذا الاختبار مخصص لمالك البوت فقط.")
+				break
+			}
+			config.SubscriptionUntil = time.Now().Add(30 * 24 * time.Hour).Unix()
+			if !saveConfig(botToken, adminID, config, msgID) {
+				sendMessage(botToken, adminID, "⚠️ تعذر حفظ اشتراك الاختبار. لم يتم تغيير حالة الاشتراك.")
+				break
+			}
+			sendMessage(botToken, adminID, "🧪 تم تفعيل اشتراك اختباري لمدة 30 يومًا للمالك دون دفع نجوم. هذه العملية اختبارية فقط، ولا تُسجَّل كدفعة ولا تزيد إيرادات Stars.")
+			sendSubscriptionStatus(botToken, adminID, config)
 		case "plans":
 			sendSubscriptionMenu(botToken, adminID, "")
 		case "subscription_status":
