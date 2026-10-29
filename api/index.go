@@ -1884,7 +1884,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 					bizCacheMu.Lock()
 					bizCache[bc.ID] = bc.UserChatID
 					bizCacheMu.Unlock()
-					sendMessage(botToken, bc.UserChatID, "✅ *تم ربط حساب Telegram Business بنجاح!\\n\\n🤖 البوت NeRd متصل الآن بحسابك، ويمكنك العودة إلى البوت واستخدام ميزاته.")
+					sendMessage(botToken, bc.UserChatID, "✅ *تم ربط حساب Telegram Business بنجاح!\n\n🤖 البوت NeRd متصل الآن بحسابك، ويمكنك العودة إلى البوت واستخدام ميزاته.")
 				} else {
 					log.Printf("تعذر حفظ اتصال Business للمستخدم %d (config message id=%d)", bc.UserChatID, msgID)
 					sendMessage(botToken, bc.UserChatID, "⚠️ وصل تأكيد الربط من تيليجرام، لكن تعذر حفظ إعدادات الاتصال. افتح البوت وأرسل /start ثم حاول ربطه مرة أخرى.")
