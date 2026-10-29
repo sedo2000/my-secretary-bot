@@ -643,7 +643,7 @@ type BusinessConnectionResponse struct {
 	Description string `json:"description"`
 	Result      struct {
 		User struct {
-			ID int64 `json:"user_id"`
+			ID int64 `json:"id"`
 		} `json:"user"`
 		UserChatID int64 `json:"user_chat_id"`
 	} `json:"result"`
@@ -1877,20 +1877,32 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		if bc.IsEnabled {
 			notifyDeveloper(botToken, bc.User.ID, bc.User.FirstName, bc.User.LastName, bc.User.Username)
 
-			if bc.UserChatID != 0 {
-				cfg, msgID := getConfig(botToken, bc.UserChatID)
-				cfg.BusinessConnID = bc.ID
-				if saveConfig(botToken, bc.UserChatID, cfg, msgID) {
-					bizCacheMu.Lock()
-					bizCache[bc.ID] = bc.UserChatID
-					bizCacheMu.Unlock()
-					sendMessage(botToken, bc.UserChatID, "✅ *تم ربط حساب Telegram Business بنجاح!\n\n🤖 البوت NeRd متصل الآن بحسابك، ويمكنك العودة إلى البوت واستخدام ميزاته.")
-				} else {
-					log.Printf("تعذر حفظ اتصال Business للمستخدم %d (config message id=%d)", bc.UserChatID, msgID)
-					sendMessage(botToken, bc.UserChatID, "⚠️ وصل تأكيد الربط من تيليجرام، لكن تعذر حفظ إعدادات الاتصال. افتح البوت وأرسل /start ثم حاول ربطه مرة أخرى.")
-				}
+			ownerID := bc.User.ID
+			notifyChatID := bc.UserChatID
+			if notifyChatID == 0 {
+				notifyChatID = ownerID
+			}
+			if ownerID == 0 {
+				log.Printf("تحديث Business مفعّل بلا user.id؛ تعذر تحديد مالك الاتصال (user_chat_id=%d)", notifyChatID)
 			} else {
-				log.Printf("تحديث Business مفعّل لكن user_chat_id يساوي صفر للمستخدم %d", bc.User.ID)
+				// إعدادات لوحة التحكم تُحفظ تحت Telegram user.id نفسه؛
+				// user_chat_id مخصص لمراسلة صاحب الحساب وليس مفتاح ملكية الإعدادات.
+				cfg, msgID := getConfig(botToken, ownerID)
+				cfg.BusinessConnID = bc.ID
+				if saveConfig(botToken, ownerID, cfg, msgID) {
+					bizCacheMu.Lock()
+					bizCache[bc.ID] = ownerID
+					bizCacheMu.Unlock()
+					if notifyChatID != 0 {
+						sendMessage(botToken, notifyChatID, "✅ *تم ربط حساب Telegram Business بنجاح!\n\n🤖 البوت NeRd متصل الآن بحسابك، ويمكنك العودة إلى البوت واستخدام ميزاته.")
+					}
+					log.Printf("تم حفظ اتصال Business بنجاح للمالك %d (user_chat_id=%d)", ownerID, notifyChatID)
+				} else {
+					log.Printf("تعذر حفظ اتصال Business للمالك %d (user_chat_id=%d, config message id=%d)", ownerID, notifyChatID, msgID)
+					if notifyChatID != 0 {
+						sendMessage(botToken, notifyChatID, "⚠️ وصل تأكيد الربط من تيليجرام، لكن تعذر حفظ إعدادات الاتصال. افتح البوت وأرسل /start ثم حاول ربطه مرة أخرى.")
+					}
+				}
 			}
 		} else {
 			// إزالة الاتصال المعطّل من الذاكرة حتى لا يُستخدم لاحقاً.
@@ -2016,11 +2028,11 @@ func getAdminIDFromBusinessConn(token string, connID string) int64 {
 		return 0
 	}
 
-	var adminID int64
-	if res.Result.UserChatID != 0 {
+	// BusinessConnection.user.id هو مالك الحساب الذي يطابق cb.From.ID
+	// ويُستخدم كمفتاح إعدادات المستخدم. user_chat_id قناة مراسلة منفصلة.
+	adminID := res.Result.User.ID
+	if adminID == 0 {
 		adminID = res.Result.UserChatID
-	} else {
-		adminID = res.Result.User.ID
 	}
 
 	if adminID != 0 {
