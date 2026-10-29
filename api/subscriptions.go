@@ -164,14 +164,17 @@ func sendSubscriptionMenu(token string, chatID int64, notice string) {
 	if notice != "" {
 		text = notice + "\n\n" + text
 	}
-	keyboard := map[string]interface{}{
-		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "📅 شهر · 100 ⭐", "callback_data": "buy_30"}},
-			{{"text": "🗓️ 3 أشهر · 250 ⭐", "callback_data": "buy_90"}},
-			{{"text": "👑 6 أشهر · 500 ⭐", "callback_data": "buy_180"}},
-			{{"text": "ℹ️ حالة اشتراكي", "callback_data": "subscription_status"}},
-		},
+	rows := [][]map[string]interface{}{
+		{{"text": "📅 شهر · 100 ⭐", "callback_data": "buy_30"}},
+		{{"text": "🗓️ 3 أشهر · 250 ⭐", "callback_data": "buy_90"}},
+		{{"text": "👑 6 أشهر · 500 ⭐", "callback_data": "buy_180"}},
+		{{"text": "ℹ️ حالة اشتراكي", "callback_data": "subscription_status"}},
 	}
+	// Owner-only testing: grants access for QA without creating a payment or revenue record.
+	if isOwnerTelegramID(chatID) {
+		rows = append(rows, []map[string]interface{}{{"text": "🧪 اختبار الاشتراك مجانًا (للمالك)", "callback_data": "owner_test_subscription"}})
+	}
+	keyboard := map[string]interface{}{"inline_keyboard": rows}
 	_, err := postTelegramJSON(token, "sendMessage", map[string]interface{}{
 		"chat_id": chatID, "text": text, "reply_markup": keyboard,
 	})
