@@ -2240,6 +2240,7 @@ func sendSubscriptionExemptionsMenu(token string, chatID int64, ids []int64) {
 		{{"text": "➖ حذف إعفاء بالآيدي", "callback_data": "exempt_remove", "style": "danger"}},
 		{{"text": "📋 قائمة المعفيين", "callback_data": "exempt_list", "style": "primary"}},
 		{{"text": "📊 إحصائيات المعفيين", "callback_data": "exempt_stats", "style": "primary"}},
+		{{"text": "💳 المدفوعات والاشتراكات", "callback_data": "owner_payments_menu", "style": "success"}},
 		{{"text": "🔙 رجوع", "callback_data": "main_menu", "style": "primary"}},
 	}}
 	if _, err := postTelegramJSON(token, "sendMessage", map[string]interface{}{"chat_id": chatID, "text": "👑 إدارة إعفاءات الاشتراك", "reply_markup": keyboard}); err != nil { log.Printf("فشل إرسال قائمة الإعفاءات: %v", err) }
