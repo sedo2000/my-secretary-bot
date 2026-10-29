@@ -430,6 +430,20 @@ type BotConfig struct {
 	TrialExpiredNoticeSent      bool     `json:"trial_expired_notice_sent,omitempty"`
 	ProcessedStarChargeIDs      []string `json:"processed_star_charge_ids,omitempty"`
 	ExemptedSubscriptionIDs     []int64  `json:"exempted_subscription_ids,omitempty"`
+	StarPayments               []StarPaymentRecord `json:"star_payments,omitempty"`
+	RecordedStarChargeIDs      []string `json:"recorded_star_charge_ids,omitempty"`
+	StarRevenueTotal           int64 `json:"star_revenue_total,omitempty"`
+	StarPaymentCount           int64 `json:"star_payment_count,omitempty"`
+}
+
+// StarPaymentRecord keeps a compact, recent payment ledger in the owner config.
+type StarPaymentRecord struct {
+	UserID int64 `json:"user_id"`
+	Amount int `json:"amount"`
+	Days int `json:"days"`
+	PaidAt int64 `json:"paid_at"`
+	SubscriptionUntil int64 `json:"subscription_until"`
+	ChargeID string `json:"charge_id,omitempty"`
 }
 
 // 🆕 عنصر ستوري
@@ -787,6 +801,20 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		case "manage_subscription_exemptions", "exemptions_menu":
 			if !isOwnerTelegramID(adminID) { sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط."); break }
 			sendSubscriptionExemptionsMenu(botToken, adminID, config.ExemptedSubscriptionIDs)
+		case "owner_payments_menu":
+			if !isOwnerTelegramID(adminID) { sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط."); break }
+			sendOwnerPaymentsMenu(botToken, adminID)
+		case "owner_payments_recent":
+			if !isOwnerTelegramID(adminID) { sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط."); break }
+			sendRecentStarPayments(botToken, adminID, config)
+		case "owner_payments_stats":
+			if !isOwnerTelegramID(adminID) { sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط."); break }
+			sendStarPaymentStats(botToken, adminID, config)
+		case "owner_payments_lookup":
+			if !isOwnerTelegramID(adminID) { sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط."); break }
+			config.State = "waiting_subscription_lookup_id"
+			if !saveConfig(botToken, adminID, config, msgID) { sendMessage(botToken, adminID, "تعذر حفظ الحالة. حاول مجددًا."); break }
+			sendMessage(botToken, adminID, "🔎 أرسل Telegram ID للمستخدم لمعرفة حالة اشتراكه وسجل الدفع المتاح.")
 		case "exempt_add":
 			if !isOwnerTelegramID(adminID) { sendMessage(botToken, adminID, "هذا الإجراء مخصص لمالك البوت فقط."); break }
 			config.State = "waiting_subscription_exempt_id"
@@ -1280,6 +1308,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			if err := applySuccessfulStarsPayment(botToken, chatID, msg.SuccessfulPayment, &config, msgID); err != nil {
 				log.Printf("تعذر تسجيل دفع Stars للمستخدم %d: %v", chatID, err)
 				sendMessage(botToken, chatID, "⚠️ وصل تأكيد الدفع لكن تعذر حفظ الاشتراك تلقائيًا. احتفظ بإيصال الدفع وتواصل مع الدعم؛ لا تعاود الدفع الآن.")
+			} else if err := recordOwnerStarPayment(botToken, chatID, msg.SuccessfulPayment, config); err != nil {
+				log.Printf("تعذر تسجيل الدفع في سجل المالك للمستخدم %d: %v", chatID, err)
 			}
 			w.WriteHeader(http.StatusOK)
 			return
@@ -1297,6 +1327,15 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 		if msg.Text == "/paysupport" {
 			sendMessage(botToken, chatID, "للدعم بشأن الدفع، أرسل رسالة إلى مسؤول Nerd مع إيصال Telegram Stars ومعرّف العملية. لا ترسل رموز تسجيل الدخول أو بيانات حساسة.")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if config.State == "waiting_subscription_lookup_id" && isOwnerTelegramID(msg.From.ID) && msg.Chat.Type == "private" {
+			targetID, parseErr := strconv.ParseInt(strings.TrimSpace(msg.Text), 10, 64)
+			if parseErr != nil || targetID <= 0 { sendMessage(botToken, chatID, "❌ المعرّف غير صحيح. أرسل أرقامًا فقط."); w.WriteHeader(http.StatusOK); return }
+			config.State = ""
+			if !saveConfig(botToken, chatID, config, msgID) { sendMessage(botToken, chatID, "⚠️ تعذر حفظ الحالة؛ حاول مرة أخرى."); w.WriteHeader(http.StatusOK); return }
+			sendUserSubscriptionLookup(botToken, chatID, targetID)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -2243,7 +2282,10 @@ func sendMenu(token string, chatID int64, lang, text string) {
 
 	if isOwnerTelegramID(chatID) {
 		rows := keyboard["inline_keyboard"].([][]map[string]interface{})
-		keyboard["inline_keyboard"] = append(rows, []map[string]interface{}{{"text": "👑 إدارة الإعفاءات", "callback_data": "exemptions_menu", "style": "primary"}})
+		keyboard["inline_keyboard"] = append(rows,
+			[]map[string]interface{}{{"text": "👑 إدارة الإعفاءات", "callback_data": "exemptions_menu", "style": "primary"}},
+			[]map[string]interface{}{{"text": "💳 المدفوعات والاشتراكات", "callback_data": "owner_payments_menu", "style": "success"}},
+		)
 	}
 
 	payload := map[string]interface{}{

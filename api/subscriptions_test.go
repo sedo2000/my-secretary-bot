@@ -8,8 +8,8 @@ func TestStarsPlanForDays(t *testing.T) {
 		amount int
 		ok     bool
 	}{
-		{days: 14, amount: 100, ok: true},
-		{days: 30, amount: 250, ok: true},
+		{days: 30, amount: 100, ok: true},
+		{days: 90, amount: 250, ok: true},
 		{days: 180, amount: 500, ok: true},
 		{days: 7, ok: false},
 	}
@@ -26,10 +26,10 @@ func TestStarsPlanForDays(t *testing.T) {
 
 func TestParseSubscriptionPayload(t *testing.T) {
 	userID, plan, ok := parseSubscriptionPayload("nerd_sub:12345:30")
-	if !ok || userID != 12345 || plan.Days != 30 || plan.Amount != 250 {
+	if !ok || userID != 12345 || plan.Days != 30 || plan.Amount != 100 {
 		t.Fatalf("unexpected parsed payload: userID=%d plan=%+v ok=%v", userID, plan, ok)
 	}
-	for _, payload := range []string{"", "nerd_sub:0:14", "nerd_sub:abc:14", "nerd_sub:123:7", "other:123:14", "nerd_sub:123:14:extra"} {
+	for _, payload := range []string{"", "nerd_sub:0:30", "nerd_sub:abc:30", "nerd_sub:123:7", "other:123:30", "nerd_sub:123:30:extra"} {
 		if _, _, ok := parseSubscriptionPayload(payload); ok {
 			t.Errorf("parseSubscriptionPayload(%q) unexpectedly succeeded", payload)
 		}
@@ -37,7 +37,7 @@ func TestParseSubscriptionPayload(t *testing.T) {
 }
 
 func TestValidStarsCheckout(t *testing.T) {
-	if !validStarsCheckout(12345, "XTR", 100, "nerd_sub:12345:14") {
+	if !validStarsCheckout(12345, "XTR", 100, "nerd_sub:12345:30") {
 		t.Fatal("expected matching Stars checkout to be valid")
 	}
 	tests := []struct {
@@ -46,10 +46,10 @@ func TestValidStarsCheckout(t *testing.T) {
 		amount int
 		payload string
 	}{
-		{12346, "XTR", 100, "nerd_sub:12345:14"},
-		{12345, "USD", 100, "nerd_sub:12345:14"},
-		{12345, "XTR", 99, "nerd_sub:12345:14"},
-		{12345, "XTR", 250, "nerd_sub:12345:14"},
+		{12346, "XTR", 100, "nerd_sub:12345:30"},
+		{12345, "USD", 100, "nerd_sub:12345:30"},
+		{12345, "XTR", 99, "nerd_sub:12345:30"},
+		{12345, "XTR", 250, "nerd_sub:12345:30"},
 	}
 	for _, tt := range tests {
 		if validStarsCheckout(tt.userID, tt.currency, tt.amount, tt.payload) {

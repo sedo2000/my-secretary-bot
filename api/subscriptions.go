@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -269,4 +270,100 @@ func applySuccessfulStarsPayment(token string, chatID int64, payment *Successful
 func logSubscriptionError(action string, chatID int64, err error) {
 	// Avoid logging invoice payloads or payment identifiers.
 	log.Printf("%s failed for chat %d: %v", action, chatID, err)
+}
+
+func sendOwnerPaymentsMenu(token string, chatID int64) {
+	rows := [][]map[string]interface{}{
+		{{"text": "🧾 آخر المدفوعات", "callback_data": "owner_payments_recent"}},
+		{{"text": "📊 إحصائيات النجوم", "callback_data": "owner_payments_stats"}},
+		{{"text": "🔎 البحث عن مستخدم", "callback_data": "owner_payments_lookup"}},
+		{{"text": "🔙 رجوع", "callback_data": "main_menu"}},
+	}
+	_, err := postTelegramJSON(token, "sendMessage", map[string]interface{}{
+		"chat_id": chatID, "text": "💳 إدارة المدفوعات والاشتراكات\n\nتُسجَّل المدفوعات بعد تأكيد Telegram فقط. السجل يعرض أحدث العمليات المحفوظة، والإحصائيات إجمالية للعمليات التي سجّلها البوت.",
+		"reply_markup": map[string]interface{}{"inline_keyboard": rows},
+	})
+	if err != nil { logSubscriptionError("sendOwnerPaymentsMenu", chatID, err) }
+}
+
+func sendRecentStarPayments(token string, chatID int64, config BotConfig) {
+	if len(config.StarPayments) == 0 { sendMessage(token, chatID, "🧾 لا توجد مدفوعات مسجلة بعد."); return }
+	baghdad := time.FixedZone("Asia/Baghdad", 3*60*60)
+	var b strings.Builder
+	fmt.Fprintf(&b, "🧾 أحدث المدفوعات المحفوظة (%d):\n\n", len(config.StarPayments))
+	for i := len(config.StarPayments)-1; i >= 0; i-- {
+		p := config.StarPayments[i]
+		fmt.Fprintf(&b, "• المستخدم: %d\n  المبلغ: %d ⭐ | المدة: %d يومًا\n  الدفع: %s (بغداد)\n  ينتهي: %s (بغداد)\n\n",
+			p.UserID, p.Amount, p.Days,
+			time.Unix(p.PaidAt, 0).In(baghdad).Format("2006-01-02 15:04"),
+			time.Unix(p.SubscriptionUntil, 0).In(baghdad).Format("2006-01-02 15:04"))
+	}
+	text := b.String()
+	if len([]rune(text)) > 3900 { text = string([]rune(text)[:3900]) }
+	sendMessage(token, chatID, text)
+}
+
+func sendStarPaymentStats(token string, chatID int64, config BotConfig) {
+	balanceText := "غير متاح عبر Bot API؛ راجع رصيد Stars من إعدادات البوت في Telegram."
+	if balance, err := getBotStarBalance(token); err == nil { balanceText = fmt.Sprintf("%d ⭐", balance) }
+	sendMessage(token, chatID, fmt.Sprintf("📊 إحصائيات مدفوعات Stars\n\n💰 إجمالي النجوم المسجلة: %d ⭐\n🧾 عدد عمليات الدفع المسجلة: %d\n💼 رصيد Stars الحالي: %s\n\nملاحظة: إجمالي النجوم هو مجموع المدفوعات التي سجّلها هذا البوت، وليس بالضرورة الرصيد القابل للسحب بعد أي معاملات أو استردادات.", config.StarRevenueTotal, config.StarPaymentCount, balanceText))
+}
+
+func sendUserSubscriptionLookup(token string, ownerChatID, userID int64) {
+	userConfig, msgID := getConfig(token, userID)
+	if msgID < 0 { sendMessage(token, ownerChatID, fmt.Sprintf("⚠️ تعذر قراءة إعدادات المستخدم %d من Telegram، لذلك لم أستطع التحقق من اشتراكه.", userID)); return }
+	status := "❌ لا يوجد اشتراك مدفوع فعّال"
+	if subscriptionActive(userConfig) {
+		status = fmt.Sprintf("✅ اشتراك مدفوع فعّال حتى %s UTC", time.Unix(userConfig.SubscriptionUntil, 0).UTC().Format("2006-01-02 15:04"))
+	} else if trialActive(userConfig) {
+		status = fmt.Sprintf("🎁 تجربة مجانية فعّالة حتى %s UTC (ليست اشتراكًا مدفوعًا)", time.Unix(userConfig.TrialUntil, 0).UTC().Format("2006-01-02 15:04"))
+	}
+	ownerConfig, ownerMsgID := getConfig(token, ownerChatID)
+	paymentHistory := "لا توجد عملية دفع لهذا المستخدم ضمن آخر العمليات المحفوظة."
+	if ownerMsgID >= 0 {
+		for i := len(ownerConfig.StarPayments)-1; i >= 0; i-- {
+			p := ownerConfig.StarPayments[i]
+			if p.UserID == userID { paymentHistory = fmt.Sprintf("🧾 آخر دفعة مسجلة: %d ⭐، باقة %d يومًا، بتاريخ %s UTC.", p.Amount, p.Days, time.Unix(p.PaidAt, 0).UTC().Format("2006-01-02 15:04")); break }
+		}
+	}
+	sendMessage(token, ownerChatID, fmt.Sprintf("🔎 حالة المستخدم %d\n\n%s\n%s", userID, status, paymentHistory))
+}
+
+func recordOwnerStarPayment(token string, userID int64, payment *SuccessfulPayment, userConfig BotConfig) error {
+	if payment == nil { return fmt.Errorf("missing successful payment") }
+	ownerID := ownerTelegramID()
+	if ownerID <= 0 { return fmt.Errorf("OWNER_TELEGRAM_ID is not configured") }
+	expectedUserID, plan, ok := parseSubscriptionPayload(payment.InvoicePayload)
+	if !ok || expectedUserID != userID || payment.Currency != "XTR" || payment.TotalAmount != plan.Amount || payment.TelegramPaymentChargeID == "" { return fmt.Errorf("payment does not match a configured Stars plan") }
+	ownerConfig, ownerMsgID := getConfig(token, ownerID)
+	if ownerMsgID < 0 { return fmt.Errorf("could not load owner config") }
+	for _, id := range ownerConfig.RecordedStarChargeIDs { if id == payment.TelegramPaymentChargeID { return nil } }
+	ownerConfig.RecordedStarChargeIDs = append(ownerConfig.RecordedStarChargeIDs, payment.TelegramPaymentChargeID)
+	if len(ownerConfig.RecordedStarChargeIDs) > 20 { ownerConfig.RecordedStarChargeIDs = append([]string(nil), ownerConfig.RecordedStarChargeIDs[len(ownerConfig.RecordedStarChargeIDs)-20:]...) }
+	ownerConfig.StarRevenueTotal += int64(payment.TotalAmount)
+	ownerConfig.StarPaymentCount++
+	ownerConfig.StarPayments = append(ownerConfig.StarPayments, StarPaymentRecord{UserID: userID, Amount: payment.TotalAmount, Days: plan.Days, PaidAt: time.Now().Unix(), SubscriptionUntil: userConfig.SubscriptionUntil, ChargeID: payment.TelegramPaymentChargeID})
+	if len(ownerConfig.StarPayments) > 10 { ownerConfig.StarPayments = append([]StarPaymentRecord(nil), ownerConfig.StarPayments[len(ownerConfig.StarPayments)-10:]...) }
+	if !saveConfig(token, ownerID, ownerConfig, ownerMsgID) { return fmt.Errorf("could not persist owner payment ledger") }
+	_, err := postTelegramJSON(token, "sendMessage", map[string]interface{}{
+		"chat_id": ownerID,
+		"text": fmt.Sprintf("💳 تم استلام دفعة Stars جديدة!\n\n🆔 المستخدم: %d\n⭐ المبلغ: %d Stars\n📦 الباقة: %s (%d يومًا)\n📅 انتهاء الاشتراك: %s UTC\n\n📊 إجمالي النجوم المسجلة: %d ⭐", userID, payment.TotalAmount, plan.Label, plan.Days, time.Unix(userConfig.SubscriptionUntil, 0).UTC().Format("2006-01-02 15:04"), ownerConfig.StarRevenueTotal),
+	})
+	if err != nil { return fmt.Errorf("payment saved but owner notification failed: %w", err) }
+	return nil
+}
+
+func getBotStarBalance(token string) (int64, error) {
+	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/getMyStarBalance", token)
+	resp, err := httpClient.Get(apiURL)
+	if err != nil { return 0, err }
+	defer resp.Body.Close()
+	var result struct {
+		Ok bool `json:"ok"`
+		Description string `json:"description"`
+		Result struct { Amount int64 `json:"amount"` } `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil { return 0, err }
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 || !result.Ok { return 0, fmt.Errorf("Telegram balance endpoint unavailable: %s", result.Description) }
+	return result.Result.Amount, nil
 }
