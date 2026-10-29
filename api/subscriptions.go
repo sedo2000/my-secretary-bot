@@ -19,6 +19,8 @@ type starsPlan struct {
 // Baghdad uses بتوقيت بغداد+3 year-round for the bot's displayed timestamps.
 var baghdadLocation = time.FixedZone("Asia/Baghdad", 3*60*60)
 
+func init() { time.Local = baghdadLocation }
+
 func formatBaghdadTimestamp(unixSeconds int64) string {
 	return time.Unix(unixSeconds, 0).In(baghdadLocation).Format("2006-01-02 15:04")
 }
@@ -193,8 +195,7 @@ func sendSubscriptionStatus(token string, chatID int64, config BotConfig) {
 		if trialActive(config) {
 			remaining := time.Until(time.Unix(config.TrialUntil, 0))
 			days := int((remaining + 24*time.Hour - 1) / (24 * time.Hour))
-			baghdad := time.FixedZone("Asia/Baghdad", 3*60*60)
-			notice := fmt.Sprintf("🎁 تجربتك المجانية فعّالة وتشمل جميع الميزات.\n⏳ المتبقي: نحو %d يومًا.\n📅 تنتهي في: %s (توقيت بغداد).\n\nبعد انتهاء التجربة، الدفع مطلوب فقط لنشر الستوري والستوريات المتعددة.", days, time.Unix(config.TrialUntil, 0).In(baghdad).Format("2006-01-02 15:04"))
+			notice := fmt.Sprintf("🎁 تجربتك المجانية فعّالة وتشمل جميع الميزات.\n⏳ المتبقي: نحو %d يومًا.\n📅 تنتهي في: %s (توقيت بغداد).\n\nبعد انتهاء التجربة، الدفع مطلوب فقط لنشر الستوري والستوريات المتعددة.", days, formatBaghdadTimestamp(config.TrialUntil))
 			sendSubscriptionMenu(token, chatID, notice)
 		} else {
 			sendSubscriptionMenu(token, chatID, "📭 انتهت التجربة المجانية. ما زالت ميزات البوت متاحة، وتحتاج إلى باقة فقط لنشر الستوري والستوريات المتعددة.")
@@ -270,7 +271,7 @@ func applySuccessfulStarsPayment(token string, chatID int64, payment *Successful
 		config.ProcessedStarChargeIDs = oldCharges
 		return fmt.Errorf("could not persist subscription config")
 	}
-	sendMessage(token, chatID, fmt.Sprintf("🎉 تم تأكيد الدفع بنجاح!\n💎 ميزة نشر الستوريات: %s\n⏳ المدة: %d يومًا\n📅 تاريخ الانتهاء: %s (UTC)\n\nتم فتح نشر الستوري والستوريات المتعددة.", plan.Label, plan.Days, time.Unix(config.SubscriptionUntil, 0).UTC().Format("2006-01-02 15:04")))
+	sendMessage(token, chatID, fmt.Sprintf("🎉 تم تأكيد الدفع بنجاح!\n💎 ميزة نشر الستوريات: %s\n⏳ المدة: %d يومًا\n📅 تاريخ الانتهاء: %s (UTC)\n\nتم فتح نشر الستوري والستوريات المتعددة.", plan.Label, plan.Days, formatBaghdadTimestamp(config.SubscriptionUntil)))
 	sendMenu(token, chatID, config.Lang, tr(config.Lang, "main_menu_title"))
 	return nil
 }
@@ -322,7 +323,7 @@ func sendUserSubscriptionLookup(token string, ownerChatID, userID int64) {
 	if msgID < 0 { sendMessage(token, ownerChatID, fmt.Sprintf("⚠️ تعذر قراءة إعدادات المستخدم %d من Telegram، لذلك لم أستطع التحقق من اشتراكه.", userID)); return }
 	status := "❌ لا يوجد اشتراك مدفوع فعّال"
 	if subscriptionActive(userConfig) {
-		status = fmt.Sprintf("✅ اشتراك مدفوع فعّال حتى %s UTC", formatBaghdadTimestamp(userConfig.SubscriptionUntil))
+		status = fmt.Sprintf("✅ اشتراك مدفوع فعّال حتى %s بتوقيت بغداد", formatBaghdadTimestamp(userConfig.SubscriptionUntil))
 	} else if trialActive(userConfig) {
 		status = fmt.Sprintf("🎁 تجربة مجانية فعّالة حتى %s UTC (ليست اشتراكًا مدفوعًا)", formatBaghdadTimestamp(userConfig.TrialUntil))
 	}
