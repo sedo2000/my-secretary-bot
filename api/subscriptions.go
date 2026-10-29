@@ -271,7 +271,7 @@ func applySuccessfulStarsPayment(token string, chatID int64, payment *Successful
 		config.ProcessedStarChargeIDs = oldCharges
 		return fmt.Errorf("could not persist subscription config")
 	}
-	sendMessage(token, chatID, fmt.Sprintf("🎉 تم تأكيد الدفع بنجاح!\n💎 ميزة نشر الستوريات: %s\n⏳ المدة: %d يومًا\n📅 تاريخ الانتهاء: %s (UTC)\n\nتم فتح نشر الستوري والستوريات المتعددة.", plan.Label, plan.Days, formatBaghdadTimestamp(config.SubscriptionUntil)))
+	sendMessage(token, chatID, fmt.Sprintf("🎉 تم تأكيد الدفع بنجاح!\n💎 ميزة نشر الستوريات: %s\n⏳ المدة: %d يومًا\n📅 تاريخ الانتهاء: %s (توقيت بغداد)\n\nتم فتح نشر الستوري والستوريات المتعددة.", plan.Label, plan.Days, formatBaghdadTimestamp(config.SubscriptionUntil)))
 	sendMenu(token, chatID, config.Lang, tr(config.Lang, "main_menu_title"))
 	return nil
 }
@@ -297,7 +297,6 @@ func sendOwnerPaymentsMenu(token string, chatID int64) {
 
 func sendRecentStarPayments(token string, chatID int64, config BotConfig) {
 	if len(config.StarPayments) == 0 { sendMessage(token, chatID, "🧾 لا توجد مدفوعات مسجلة بعد."); return }
-	baghdad := time.FixedZone("Asia/Baghdad", 3*60*60)
 	var b strings.Builder
 	fmt.Fprintf(&b, "🧾 أحدث المدفوعات المحفوظة (%d):\n\n", len(config.StarPayments))
 	for i := len(config.StarPayments)-1; i >= 0; i-- {
@@ -325,14 +324,14 @@ func sendUserSubscriptionLookup(token string, ownerChatID, userID int64) {
 	if subscriptionActive(userConfig) {
 		status = fmt.Sprintf("✅ اشتراك مدفوع فعّال حتى %s بتوقيت بغداد", formatBaghdadTimestamp(userConfig.SubscriptionUntil))
 	} else if trialActive(userConfig) {
-		status = fmt.Sprintf("🎁 تجربة مجانية فعّالة حتى %s UTC (ليست اشتراكًا مدفوعًا)", formatBaghdadTimestamp(userConfig.TrialUntil))
+		status = fmt.Sprintf("🎁 تجربة مجانية فعّالة حتى %s بتوقيت بغداد (ليست اشتراكًا مدفوعًا)", formatBaghdadTimestamp(userConfig.TrialUntil))
 	}
 	ownerConfig, ownerMsgID := getConfig(token, ownerChatID)
 	paymentHistory := "لا توجد عملية دفع لهذا المستخدم ضمن آخر العمليات المحفوظة."
 	if ownerMsgID >= 0 {
 		for i := len(ownerConfig.StarPayments)-1; i >= 0; i-- {
 			p := ownerConfig.StarPayments[i]
-			if p.UserID == userID { paymentHistory = fmt.Sprintf("🧾 آخر دفعة مسجلة: %d ⭐، باقة %d يومًا، بتاريخ %s UTC.", p.Amount, p.Days, formatBaghdadTimestamp(p.PaidAt)); break }
+			if p.UserID == userID { paymentHistory = fmt.Sprintf("🧾 آخر دفعة مسجلة: %d ⭐، باقة %d يومًا، بتاريخ %s بتوقيت بغداد.", p.Amount, p.Days, formatBaghdadTimestamp(p.PaidAt)); break }
 		}
 	}
 	sendMessage(token, ownerChatID, fmt.Sprintf("🔎 حالة المستخدم %d\n\n%s\n%s", userID, status, paymentHistory))
