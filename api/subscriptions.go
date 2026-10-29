@@ -16,6 +16,15 @@ type starsPlan struct {
 	Label  string
 }
 
+// Baghdad uses بتوقيت بغداد+3 year-round for the bot's displayed timestamps.
+var baghdadLocation = time.FixedZone("Asia/Baghdad", 3*60*60)
+
+func init() { time.Local = baghdadLocation }
+
+func formatBaghdadTimestamp(unixSeconds int64) string {
+	return time.Unix(unixSeconds, 0).In(baghdadLocation).Format("2006-01-02 15:04")
+}
+
 const trialDuration = 7 * 24 * time.Hour
 
 func ensureFreeTrial(config *BotConfig) bool {
@@ -39,8 +48,7 @@ func canUseStoryPublishing(token string, userID int64, config BotConfig) bool {
 }
 
 func trialWelcomeText(config BotConfig) string {
-	baghdad := time.FixedZone("Asia/Baghdad", 3*60*60)
-	return fmt.Sprintf("🎁 بدأت تجربتك المجانية لمدة 7 أيام وتشمل جميع ميزات البوت!\n📅 تنتهي في: %s (توقيت بغداد)\n\nبعد انتهاء التجربة، تبقى جميع الميزات متاحة باستثناء نشر ستوري ونشر ستوريات متعددة، ويمكن تفعيلهما بباقة Stars.", time.Unix(config.TrialUntil, 0).In(baghdad).Format("2006-01-02 15:04"))
+	return fmt.Sprintf("🎁 بدأت تجربتك المجانية لمدة 7 أيام وتشمل جميع ميزات البوت!\n📅 تنتهي في: %s (توقيت بغداد)\n\nبعد انتهاء التجربة، تبقى جميع الميزات متاحة باستثناء نشر ستوري ونشر ستوريات متعددة، ويمكن تفعيلهما بباقة Stars.", formatBaghdadTimestamp(config.TrialUntil))
 }
 
 func sendTrialNotice(token string, chatID int64, config *BotConfig, msgID int, newlyStarted bool) {
@@ -54,8 +62,7 @@ func sendTrialNotice(token string, chatID int64, config *BotConfig, msgID int, n
 	}
 	if now < config.TrialUntil && config.TrialUntil-now <= 24*60*60 && !config.TrialReminderSent {
 		config.TrialReminderSent = true
-		baghdad := time.FixedZone("Asia/Baghdad", 3*60*60)
-		if saveConfig(token, chatID, *config, msgID) { sendMessage(token, chatID, fmt.Sprintf("⏳ تذكير: تنتهي تجربتك المجانية خلال أقل من 24 ساعة، بتاريخ %s (توقيت بغداد). بعد انتهائها، ستحتاج إلى Stars فقط لنشر الستوري والستوريات المتعددة.", time.Unix(config.TrialUntil, 0).In(baghdad).Format("2006-01-02 15:04"))) }
+		if saveConfig(token, chatID, *config, msgID) { sendMessage(token, chatID, fmt.Sprintf("⏳ تذكير: تنتهي تجربتك المجانية خلال أقل من 24 ساعة، بتاريخ %s (توقيت بغداد). بعد انتهائها، ستحتاج إلى Stars فقط لنشر الستوري والستوريات المتعددة.", formatBaghdadTimestamp(config.TrialUntil))) }
 	}
 }
 
@@ -188,8 +195,7 @@ func sendSubscriptionStatus(token string, chatID int64, config BotConfig) {
 		if trialActive(config) {
 			remaining := time.Until(time.Unix(config.TrialUntil, 0))
 			days := int((remaining + 24*time.Hour - 1) / (24 * time.Hour))
-			baghdad := time.FixedZone("Asia/Baghdad", 3*60*60)
-			notice := fmt.Sprintf("🎁 تجربتك المجانية فعّالة وتشمل جميع الميزات.\n⏳ المتبقي: نحو %d يومًا.\n📅 تنتهي في: %s (توقيت بغداد).\n\nبعد انتهاء التجربة، الدفع مطلوب فقط لنشر الستوري والستوريات المتعددة.", days, time.Unix(config.TrialUntil, 0).In(baghdad).Format("2006-01-02 15:04"))
+			notice := fmt.Sprintf("🎁 تجربتك المجانية فعّالة وتشمل جميع الميزات.\n⏳ المتبقي: نحو %d يومًا.\n📅 تنتهي في: %s (توقيت بغداد).\n\nبعد انتهاء التجربة، الدفع مطلوب فقط لنشر الستوري والستوريات المتعددة.", days, formatBaghdadTimestamp(config.TrialUntil))
 			sendSubscriptionMenu(token, chatID, notice)
 		} else {
 			sendSubscriptionMenu(token, chatID, "📭 انتهت التجربة المجانية. ما زالت ميزات البوت متاحة، وتحتاج إلى باقة فقط لنشر الستوري والستوريات المتعددة.")
@@ -198,7 +204,7 @@ func sendSubscriptionStatus(token string, chatID int64, config BotConfig) {
 	}
 	remaining := time.Until(time.Unix(config.SubscriptionUntil, 0))
 	days := int((remaining + 24*time.Hour - 1) / (24 * time.Hour))
-	text := fmt.Sprintf("✅ اشتراك نشر الستوريات فعّال.\n⏳ متبقٍ نحو %d يومًا.\n📅 ينتهي في: %s (UTC)", days, time.Unix(config.SubscriptionUntil, 0).UTC().Format("2006-01-02 15:04"))
+	text := fmt.Sprintf("✅ اشتراك نشر الستوريات فعّال.\n⏳ متبقٍ نحو %d يومًا.\n📅 ينتهي في: %s (توقيت بغداد)", days, formatBaghdadTimestamp(config.SubscriptionUntil))
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
 			{{"text": "➕ تمديد الاشتراك", "callback_data": "plans"}},
@@ -265,7 +271,7 @@ func applySuccessfulStarsPayment(token string, chatID int64, payment *Successful
 		config.ProcessedStarChargeIDs = oldCharges
 		return fmt.Errorf("could not persist subscription config")
 	}
-	sendMessage(token, chatID, fmt.Sprintf("🎉 تم تأكيد الدفع بنجاح!\n💎 ميزة نشر الستوريات: %s\n⏳ المدة: %d يومًا\n📅 تاريخ الانتهاء: %s (UTC)\n\nتم فتح نشر الستوري والستوريات المتعددة.", plan.Label, plan.Days, time.Unix(config.SubscriptionUntil, 0).UTC().Format("2006-01-02 15:04")))
+	sendMessage(token, chatID, fmt.Sprintf("🎉 تم تأكيد الدفع بنجاح!\n💎 ميزة نشر الستوريات: %s\n⏳ المدة: %d يومًا\n📅 تاريخ الانتهاء: %s (توقيت بغداد)\n\nتم فتح نشر الستوري والستوريات المتعددة.", plan.Label, plan.Days, formatBaghdadTimestamp(config.SubscriptionUntil)))
 	sendMenu(token, chatID, config.Lang, tr(config.Lang, "main_menu_title"))
 	return nil
 }
@@ -291,15 +297,14 @@ func sendOwnerPaymentsMenu(token string, chatID int64) {
 
 func sendRecentStarPayments(token string, chatID int64, config BotConfig) {
 	if len(config.StarPayments) == 0 { sendMessage(token, chatID, "🧾 لا توجد مدفوعات مسجلة بعد."); return }
-	baghdad := time.FixedZone("Asia/Baghdad", 3*60*60)
 	var b strings.Builder
 	fmt.Fprintf(&b, "🧾 أحدث المدفوعات المحفوظة (%d):\n\n", len(config.StarPayments))
 	for i := len(config.StarPayments)-1; i >= 0; i-- {
 		p := config.StarPayments[i]
 		fmt.Fprintf(&b, "• المستخدم: %d\n  المبلغ: %d ⭐ | المدة: %d يومًا\n  الدفع: %s (بغداد)\n  ينتهي: %s (بغداد)\n\n",
 			p.UserID, p.Amount, p.Days,
-			time.Unix(p.PaidAt, 0).In(baghdad).Format("2006-01-02 15:04"),
-			time.Unix(p.SubscriptionUntil, 0).In(baghdad).Format("2006-01-02 15:04"))
+			formatBaghdadTimestamp(p.PaidAt),
+			formatBaghdadTimestamp(p.SubscriptionUntil))
 	}
 	text := b.String()
 	if len([]rune(text)) > 3900 { text = string([]rune(text)[:3900]) }
@@ -317,16 +322,16 @@ func sendUserSubscriptionLookup(token string, ownerChatID, userID int64) {
 	if msgID < 0 { sendMessage(token, ownerChatID, fmt.Sprintf("⚠️ تعذر قراءة إعدادات المستخدم %d من Telegram، لذلك لم أستطع التحقق من اشتراكه.", userID)); return }
 	status := "❌ لا يوجد اشتراك مدفوع فعّال"
 	if subscriptionActive(userConfig) {
-		status = fmt.Sprintf("✅ اشتراك مدفوع فعّال حتى %s UTC", time.Unix(userConfig.SubscriptionUntil, 0).UTC().Format("2006-01-02 15:04"))
+		status = fmt.Sprintf("✅ اشتراك مدفوع فعّال حتى %s بتوقيت بغداد", formatBaghdadTimestamp(userConfig.SubscriptionUntil))
 	} else if trialActive(userConfig) {
-		status = fmt.Sprintf("🎁 تجربة مجانية فعّالة حتى %s UTC (ليست اشتراكًا مدفوعًا)", time.Unix(userConfig.TrialUntil, 0).UTC().Format("2006-01-02 15:04"))
+		status = fmt.Sprintf("🎁 تجربة مجانية فعّالة حتى %s بتوقيت بغداد (ليست اشتراكًا مدفوعًا)", formatBaghdadTimestamp(userConfig.TrialUntil))
 	}
 	ownerConfig, ownerMsgID := getConfig(token, ownerChatID)
 	paymentHistory := "لا توجد عملية دفع لهذا المستخدم ضمن آخر العمليات المحفوظة."
 	if ownerMsgID >= 0 {
 		for i := len(ownerConfig.StarPayments)-1; i >= 0; i-- {
 			p := ownerConfig.StarPayments[i]
-			if p.UserID == userID { paymentHistory = fmt.Sprintf("🧾 آخر دفعة مسجلة: %d ⭐، باقة %d يومًا، بتاريخ %s UTC.", p.Amount, p.Days, time.Unix(p.PaidAt, 0).UTC().Format("2006-01-02 15:04")); break }
+			if p.UserID == userID { paymentHistory = fmt.Sprintf("🧾 آخر دفعة مسجلة: %d ⭐، باقة %d يومًا، بتاريخ %s بتوقيت بغداد.", p.Amount, p.Days, formatBaghdadTimestamp(p.PaidAt)); break }
 		}
 	}
 	sendMessage(token, ownerChatID, fmt.Sprintf("🔎 حالة المستخدم %d\n\n%s\n%s", userID, status, paymentHistory))
@@ -350,7 +355,7 @@ func recordOwnerStarPayment(token string, userID int64, payment *SuccessfulPayme
 	if !saveConfig(token, ownerID, ownerConfig, ownerMsgID) { return fmt.Errorf("could not persist owner payment ledger") }
 	_, err := postTelegramJSON(token, "sendMessage", map[string]interface{}{
 		"chat_id": ownerID,
-		"text": fmt.Sprintf("💳 تم استلام دفعة Stars جديدة!\n\n🆔 المستخدم: %d\n⭐ المبلغ: %d Stars\n📦 الباقة: %s (%d يومًا)\n📅 انتهاء الاشتراك: %s UTC\n\n📊 إجمالي النجوم المسجلة: %d ⭐", userID, payment.TotalAmount, plan.Label, plan.Days, time.Unix(userConfig.SubscriptionUntil, 0).UTC().Format("2006-01-02 15:04"), ownerConfig.StarRevenueTotal),
+		"text": fmt.Sprintf("💳 تم استلام دفعة Stars جديدة!\n\n🆔 المستخدم: %d\n⭐ المبلغ: %d Stars\n📦 الباقة: %s (%d يومًا)\n📅 انتهاء الاشتراك: %s UTC\n\n📊 إجمالي النجوم المسجلة: %d ⭐", userID, payment.TotalAmount, plan.Label, plan.Days, formatBaghdadTimestamp(userConfig.SubscriptionUntil), ownerConfig.StarRevenueTotal),
 	})
 	if err != nil { return fmt.Errorf("payment saved but owner notification failed: %w", err) }
 	return nil
