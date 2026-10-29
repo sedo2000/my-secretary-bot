@@ -39,6 +39,9 @@ var (
 // صورة الترحيب
 const startPhotoURL = "https://od.lk/s/M18zMzMwODEzNDNfV3R3TEM/IMG_20260810_235848_327.jpg"
 
+// صورة الرد عند إرسال كلمة تفعيل
+const activationPhotoURL = "https://od.lk/s/M18zMzkzODI3MjVfSnViRzI/IMG_20261029_114502_388.jpg"
+
 // قائمة الاقتباسات
 var quotes = []string{
 	"قاوم ما تكره لتصل الى ما تحب",
@@ -2202,33 +2205,23 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) bool
 // ============== إرسال الرسائل والقوائم ==============
 
 func sendNerdBotInfo(token string, chatID int64) {
-	text := "المحادثة الآلية الذكية\nالحالة: 🟢 مفعّلة\n\nأي مشكلة تواجهك بالبوت، تواصل @m5ymy"
-	keyboard := map[string]interface{}{
-		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "فعلني من هنا", "url": "https://t.me/Xhwe2/10", "style": "success"}},
-		},
+	payload := map[string]interface{}{
+		"chat_id": chatID,
+		"photo":   activationPhotoURL,
 	}
-	payload := map[string]interface{}{"chat_id": chatID, "text": text, "reply_markup": keyboard}
-	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
-		log.Printf("فشل إرسال رسالة Telegram: %v", err)
+	if _, err := postTelegramJSON(token, "sendPhoto", payload); err != nil {
+		log.Printf("فشل إرسال صورة التفعيل إلى المحادثة %d: %v", chatID, err)
 	}
 }
 
 func sendNerdBotInfoBusiness(token string, chatID int64, bizID string) {
-	text := "انا اسمي نيرد | Nerd من خلالي رح تقدر تنشر ستوريات غير محدودة بدون اشتراك مميز"
-	keyboard := map[string]interface{}{
-		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "فعلني من هنا", "url": "https://t.me/Xhwe2/10", "style": "success"}},
-		},
-	}
 	payload := map[string]interface{}{
 		"chat_id":                chatID,
-		"text":                   text,
+		"photo":                  activationPhotoURL,
 		"business_connection_id": bizID,
-		"reply_markup":           keyboard,
 	}
-	if _, err := postTelegramJSON(token, "sendMessage", payload); err != nil {
-		log.Printf("فشل إرسال رسالة Telegram: %v", err)
+	if _, err := postTelegramJSON(token, "sendPhoto", payload); err != nil {
+		log.Printf("فشل إرسال صورة التفعيل عبر Telegram Business إلى المحادثة %d: %v", chatID, err)
 	}
 }
 
