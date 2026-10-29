@@ -1407,7 +1407,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if strings.TrimSpace(msg.Text) == "بوت" || strings.Contains(msg.Text, "بوت") {
+		if strings.TrimSpace(msg.Text) == "تفعيل" {
 			sendNerdBotInfo(botToken, chatID)
 			w.WriteHeader(http.StatusOK)
 			return
@@ -1763,8 +1763,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// الرد على كلمة "بوت"
-		if strings.TrimSpace(msg.Text) == "بوت" || strings.Contains(msg.Text, "بوت") {
+		// الرد على كلمة "تفعيل"
+		if strings.TrimSpace(msg.Text) == "تفعيل" {
 			sendNerdBotInfoBusiness(botToken, customerChatID, msg.BusinessConnectionID)
 			w.WriteHeader(http.StatusOK)
 			return
@@ -2202,7 +2202,7 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) bool
 // ============== إرسال الرسائل والقوائم ==============
 
 func sendNerdBotInfo(token string, chatID int64) {
-	text := "انا اسمي نيرد | Nerd من خلالي رح تقدر تنشر ستوريات غير محدودة بدون اشتراك مميز"
+	text := "المحادثة الآلية الذكية\nالحالة: 🟢 مفعّلة\n\nأي مشكلة تواجهك بالبوت، تواصل @m5ymy"
 	keyboard := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
 			{{"text": "فعلني من هنا", "url": "https://t.me/Xhwe2/10", "style": "success"}},
