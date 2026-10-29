@@ -1872,13 +1872,25 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	// ============ 4. ربط الحساب التجاري ============
 	if update.BusinessConnection != nil {
 		bc := update.BusinessConnection
+		log.Printf("استلام تحديث business_connection: user_id=%d user_chat_id=%d enabled=%t", bc.User.ID, bc.UserChatID, bc.IsEnabled)
+
 		if bc.IsEnabled {
 			notifyDeveloper(botToken, bc.User.ID, bc.User.FirstName, bc.User.LastName, bc.User.Username)
 
 			if bc.UserChatID != 0 {
 				cfg, msgID := getConfig(botToken, bc.UserChatID)
 				cfg.BusinessConnID = bc.ID
-				saveConfig(botToken, bc.UserChatID, cfg, msgID)
+				if saveConfig(botToken, bc.UserChatID, cfg, msgID) {
+					bizCacheMu.Lock()
+					bizCache[bc.ID] = bc.UserChatID
+					bizCacheMu.Unlock()
+					sendMessage(botToken, bc.UserChatID, "✅ *تم ربط حساب Telegram Business بنجاح!\n\n🤖 البوت NeRd متصل الآن بحسابك، ويمكنك العودة إلى البوت واستخدام ميزاته.")
+				} else {
+					log.Printf("تعذر حفظ اتصال Business للمستخدم %d (config message id=%d)", bc.UserChatID, msgID)
+					sendMessage(botToken, bc.UserChatID, "⚠️ وصل تأكيد الربط من تيليجرام، لكن تعذر حفظ إعدادات الاتصال. افتح البوت وأرسل /start ثم حاول ربطه مرة أخرى.")
+				}
+			} else {
+				log.Printf("تحديث Business مفعّل لكن user_chat_id يساوي صفر للمستخدم %d", bc.User.ID)
 			}
 		} else {
 			// إزالة الاتصال المعطّل من الذاكرة حتى لا يُستخدم لاحقاً.
@@ -1892,6 +1904,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 					cfg.BusinessConnID = ""
 					saveConfig(botToken, bc.UserChatID, cfg, msgID)
 				}
+				sendMessage(botToken, bc.UserChatID, "⚠️ تم فصل اتصال Telegram Business عن البوت. إذا كان هذا غير مقصود، أعد ربط NeRd من إعدادات Telegram Business.")
 			}
 		}
 		w.WriteHeader(http.StatusOK)
