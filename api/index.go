@@ -432,6 +432,7 @@ type BotConfig struct {
 	TrialReminderSent           bool     `json:"trial_reminder_sent,omitempty"`
 	TrialExpiredNoticeSent      bool     `json:"trial_expired_notice_sent,omitempty"`
 	ProcessedStarChargeIDs      []string `json:"processed_star_charge_ids,omitempty"`
+	StoryCollageFiles            []string `json:"story_collage_files,omitempty"`
 	ExemptedSubscriptionIDs     []int64  `json:"exempted_subscription_ids,omitempty"`
 	StarPayments               []StarPaymentRecord `json:"star_payments,omitempty"`
 	RecordedStarChargeIDs      []string `json:"recorded_star_charge_ids,omitempty"`
@@ -893,6 +894,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			})
 		case "content_menu":
 			sendSimpleSubmenu(botToken, adminID, "📸 نشر الستوريات - ستوري واحدة أو ستوريات متعددة", [][]map[string]interface{}{
+				{{"text": "🧩 إنشاء تجميعة من 6 صور", "callback_data": "story_collage_start", "style": "success"}},
 				{{"text": tr(lang, "batch_story_btn"), "callback_data": "batch_story_menu", "style": "success"}},
 				{{"text": tr(lang, "post_story_btn"), "callback_data": "post_story", "style": "primary"}},
 				{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "primary"}},
@@ -1128,6 +1130,23 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			config.State = "waiting_voice_reply"
 			saveConfig(botToken, adminID, config, msgID)
 			sendSubMenu(botToken, adminID, lang, tr(lang, "voice_reply_prompt"))
+
+		case "story_collage_start":
+			if !canUseStoryPublishing(botToken, adminID, config) {
+				sendSubscriptionMenu(botToken, adminID, "🔒 انتهت التجربة المجانية. اختر باقة لفتح نشر الستوري.")
+				break
+			}
+			if config.BusinessConnID == "" {
+				sendMenu(botToken, adminID, lang, tr(lang, "no_business_connection"))
+				break
+			}
+			config.StoryCollageFiles = []string{}
+			config.State = "waiting_story_collage"
+			if !saveConfig(botToken, adminID, config, msgID) {
+				sendMenu(botToken, adminID, lang, "تعذر بدء التجميعة وحفظ حالتها. حاول مرة أخرى.")
+				break
+			}
+			sendSubMenu(botToken, adminID, lang, "🧩 أرسل 6 صور بالترتيب. سأجمعها في صورة واحدة عمودية 9:16 وأنشرها كقصة واحدة.")
 
 		// ===== قائمة الستوريات المتعددة =====
 		case "batch_story_menu":
@@ -1528,6 +1547,48 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			config.State = ""
 			saveConfig(botToken, chatID, config, msgID)
 			sendInteractionMenu(botToken, chatID, lang, config)
+
+		// ===== إنشاء تجميعة ستوري من ست صور =====
+		} else if config.State == "waiting_story_collage" {
+			if len(msg.Photo) == 0 {
+				sendSubMenu(botToken, chatID, lang, "❌ أرسل صورة فعلية. أحتاج 6 صور بالضبط.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			if len(config.StoryCollageFiles) >= 6 {
+				config.StoryCollageFiles = []string{}
+			}
+			config.StoryCollageFiles = append(config.StoryCollageFiles, msg.Photo[len(msg.Photo)-1].FileID)
+			count := len(config.StoryCollageFiles)
+			if count < 6 {
+				if !saveConfig(botToken, chatID, config, msgID) {
+					sendSubMenu(botToken, chatID, lang, "تعذر حفظ الصورة. أعد إرسالها من فضلك.")
+				} else {
+					sendMessage(botToken, chatID, fmt.Sprintf("✅ تم استلام الصورة %d من 6.", count))
+				}
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			if !saveConfig(botToken, chatID, config, msgID) {
+				sendSubMenu(botToken, chatID, lang, "تعذر حفظ الصور الست. لم أبدأ النشر.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			sendMessage(botToken, chatID, "⏳ وصلت الصور الست. جارٍ إنشاء التجميعة ونشرها...")
+			collage, err := createSixPhotoStoryCollage(botToken, config.StoryCollageFiles)
+			if err == nil {
+				err = postBusinessStoryJPEG(botToken, config.BusinessConnID, collage, "86400")
+			}
+			config.State = ""
+			config.StoryCollageFiles = []string{}
+			saveConfig(botToken, chatID, config, msgID)
+			if err != nil {
+				sendSubMenu(botToken, chatID, lang, "❌ تعذر إنشاء أو نشر التجميعة: "+err.Error())
+			} else {
+				sendMenu(botToken, chatID, lang, "✅ تم إنشاء تجميعة الصور الست ونشرها كقصة واحدة لمدة 24 ساعة.")
+			}
+			w.WriteHeader(http.StatusOK)
+			return
 
 		// ===== معالجة إضافة عنصر للستوريات =====
 		} else if config.State == "waiting_batch_item" {
