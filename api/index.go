@@ -593,17 +593,6 @@ type UsersSharedData struct {
 	Users     []SharedUserInfo `json:"users"`
 }
 
-type ForwardedChat struct {
-	ID       int64  `json:"id"`
-	Title    string `json:"title"`
-	Username string `json:"username"`
-}
-
-type MessageOrigin struct {
-	Type string        `json:"type"`
-	Chat *ForwardedChat `json:"chat"`
-}
-
 type Message struct {
 	MessageID int `json:"message_id"`
 	Chat      struct {
@@ -623,14 +612,6 @@ type Message struct {
 	Animation   *Animation       `json:"animation"`
 	Sticker     *Sticker         `json:"sticker"`
 	Document    *Document        `json:"document"`
-	VideoNote   *struct{}        `json:"video_note"`
-	Contact     *struct{}        `json:"contact"`
-	Location    *struct{}        `json:"location"`
-	Venue       *struct{}        `json:"venue"`
-	Poll        *struct{}        `json:"poll"`
-	Dice        *struct{}        `json:"dice"`
-	ForwardOrigin *MessageOrigin `json:"forward_origin"`
-	ForwardFromChat *ForwardedChat `json:"forward_from_chat"`
 	UsersShared *UsersSharedData `json:"users_shared"`
 }
 
@@ -914,7 +895,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		case "content_menu":
 			sendSimpleSubmenu(botToken, adminID, "📸 نشر الستوريات - ستوري واحدة أو ستوريات متعددة", [][]map[string]interface{}{
 				{{"text": "🧩 إنشاء تجميعة من 6 صور", "callback_data": "story_collage_start", "style": "success"}},
-				{{"text": "🔁 إعادة نشر وسيط في الستوري", "callback_data": "story_repost_start", "style": "success"}},
 				{{"text": tr(lang, "batch_story_btn"), "callback_data": "batch_story_menu", "style": "success"}},
 				{{"text": tr(lang, "post_story_btn"), "callback_data": "post_story", "style": "primary"}},
 				{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "primary"}},
@@ -1328,21 +1308,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			config.State = "waiting_photo"
 			saveConfig(botToken, adminID, config, msgID)
 			sendSubMenu(botToken, adminID, lang, tr(lang, "photo_prompt"))
-		case "story_repost_start":
-			if !canUseStoryPublishing(botToken, adminID, config) {
-				sendSubscriptionMenu(botToken, adminID, "🔒 انتهت التجربة المجانية. اختر باقة لفتح نشر الستوري.")
-				break
-			}
-			if config.BusinessConnID == "" {
-				sendMenu(botToken, adminID, lang, tr(lang, "no_business_connection"))
-				break
-			}
-			config.State = "waiting_story_repost"
-			if !saveConfig(botToken, adminID, config, msgID) {
-				sendMenu(botToken, adminID, lang, "تعذر بدء إعادة النشر وحفظ الحالة. حاول مرة أخرى.")
-				break
-			}
-			sendSubMenu(botToken, adminID, lang, "🔁 أعد توجيه صورة أو فيديو من قناتك إلى هنا، أو أرسله مباشرة. سيتعرف البوت على نوع الوسيط ويعرض نتيجة النشر.\n\nيدعم النشر المباشر: الصور والفيديوهات حتى 60 ثانية. ملفات الصوت والملصقات وGIF والملفات الأخرى ليست قصصاً مدعومة مباشرة.")
 		case "post_story":
 			if config.BusinessConnID == "" {
 				sendMenu(botToken, adminID, lang, tr(lang, "no_business_connection"))
@@ -1757,94 +1722,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 					config.State = ""
 					saveConfig(botToken, chatID, config, msgID)
 					sendMenu(botToken, chatID, lang, tr(lang, "photo_updated"))
-				}
-			}
-		} else if config.State == "waiting_story_repost" {
-			if !canUseStoryPublishing(botToken, msg.From.ID, config) {
-				config.State = ""
-				saveConfig(botToken, chatID, config, msgID)
-				sendSubscriptionMenu(botToken, chatID, "🔒 انتهت التجربة المجانية. اختر باقة لفتح نشر الستوري.")
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-			if config.BusinessConnID == "" {
-				config.State = ""
-				saveConfig(botToken, chatID, config, msgID)
-				sendMenu(botToken, chatID, lang, tr(lang, "no_business_connection"))
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-
-			mediaType, fileID, duration := "", "", 0
-			detected := "وسيط غير معروف"
-			switch {
-			case len(msg.Photo) > 0:
-				mediaType, detected = "photo", "صورة"
-				fileID = msg.Photo[len(msg.Photo)-1].FileID
-			case msg.Video != nil:
-				mediaType, detected = "video", "فيديو"
-				fileID, duration = msg.Video.FileID, msg.Video.Duration
-			case msg.Document != nil && strings.HasPrefix(strings.ToLower(msg.Document.MimeType), "image/"):
-				mediaType, detected = "photo", "صورة مرسلة كملف"
-				fileID = msg.Document.FileID
-			case msg.Document != nil && (strings.EqualFold(msg.Document.MimeType, "video/mp4") || strings.HasSuffix(strings.ToLower(msg.Document.FileName), ".mp4")):
-				mediaType, detected = "video", "فيديو MP4 مرسل كملف"
-				fileID = msg.Document.FileID
-			case msg.Animation != nil:
-				detected = "GIF / صورة متحركة"
-			case msg.Sticker != nil:
-				detected = "ملصق متحرك أو ثابت"
-			case msg.Audio != nil:
-				detected = "ملف صوتي"
-			case msg.Voice != nil:
-				detected = "رسالة صوتية"
-			case msg.VideoNote != nil:
-				detected = "فيديو دائري"
-			case msg.Contact != nil:
-				detected = "جهة اتصال"
-			case msg.Location != nil || msg.Venue != nil:
-				detected = "موقع جغرافي"
-			case msg.Poll != nil:
-				detected = "استطلاع"
-			case msg.Dice != nil:
-				detected = "رسالة تفاعلية"
-			case msg.Document != nil:
-				detected = "مستند: " + msg.Document.FileName
-			case strings.TrimSpace(msg.Text) != "":
-				detected = "رسالة نصية"
-			}
-
-			sourceChannel := ""
-			if msg.ForwardOrigin != nil && msg.ForwardOrigin.Type == "channel" && msg.ForwardOrigin.Chat != nil {
-				sourceChannel = msg.ForwardOrigin.Chat.Title
-				if msg.ForwardOrigin.Chat.Username != "" {
-					sourceChannel += " (@" + msg.ForwardOrigin.Chat.Username + ")"
-				}
-			} else if msg.ForwardFromChat != nil {
-				sourceChannel = msg.ForwardFromChat.Title
-				if msg.ForwardFromChat.Username != "" {
-					sourceChannel += " (@" + msg.ForwardFromChat.Username + ")"
-				}
-			}
-			sourceLabel := "مصدر الوسيط: غير متاح؛ قد تكون إعادة التوجيه محمية أو أخفت القناة المصدر."
-			if sourceChannel != "" {
-				sourceLabel = "القناة المصدر: " + sourceChannel
-			}
-
-			if mediaType == "" {
-				sendSubMenu(botToken, chatID, lang, "🔎 نوع الوسيط: "+detected+"\n"+sourceLabel+"\n\nهذا النوع لا يمكن نشره مباشرة كقصة عبر واجهة Telegram Bot API الحالية. يدعم النشر المباشر حالياً الصور والفيديوهات، بما فيها صور JPG/PNG المرسلة كملفات وفيديو MP4 المرسل كمستند. لم يتم نشر أي شيء.")
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-
-			if err := postBusinessStory(botToken, config.BusinessConnID, mediaType, fileID, duration, "86400", lang); err != nil {
-				sendSubMenu(botToken, chatID, lang, fmt.Sprintf("❌ تعذر إعادة نشر الوسيط كقصة.\n%s\n%s\nيمكنك إرسال وسيط آخر للمحاولة مجدداً.", sourceLabel, err.Error()))
-			} else {
-				config.State = ""
-				if !saveConfig(botToken, chatID, config, msgID) {
-					sendMenu(botToken, chatID, lang, "✅ تم إرسال طلب نشر القصة إلى Telegram.\n"+sourceLabel+"\nلكن تعذر حفظ حالة البوت.")
-				} else {
-					sendMenu(botToken, chatID, lang, "✅ تمت إعادة نشر "+detected+" كقصة بنجاح لمدة 24 ساعة.\n"+sourceLabel)
 				}
 			}
 		} else if strings.HasPrefix(config.State, "waiting_story_") {
