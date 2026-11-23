@@ -4,9 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"image"
-	"image/color"
 	"image/jpeg"
-	"image/png"
+	_ "image/png"
 	_ "image/gif"
 	"math"
 )
@@ -71,6 +70,3 @@ func postBusinessStoryJPEG(token, businessConnID string, jpegData []byte, active
 	return postMultipartBusinessAPI(token, "postStory", fields, "content", "story-collage.jpg", jpegData)
 }
 
-// Keep png referenced explicitly for decoder support across Go toolchains.
-var _ = png.BestCompression
-var _ color.Color
