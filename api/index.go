@@ -895,6 +895,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		case "content_menu":
 			sendSimpleSubmenu(botToken, adminID, "📸 نشر الستوريات - ستوري واحدة أو ستوريات متعددة", [][]map[string]interface{}{
 				{{"text": "🧩 إنشاء تجميعة من 6 صور", "callback_data": "story_collage_start", "style": "success"}},
+				{{"text": "🔁 إعادة نشر وسيط في الستوري", "callback_data": "story_repost_start", "style": "success"}},
 				{{"text": tr(lang, "batch_story_btn"), "callback_data": "batch_story_menu", "style": "success"}},
 				{{"text": tr(lang, "post_story_btn"), "callback_data": "post_story", "style": "primary"}},
 				{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "primary"}},
@@ -1308,6 +1309,21 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			config.State = "waiting_photo"
 			saveConfig(botToken, adminID, config, msgID)
 			sendSubMenu(botToken, adminID, lang, tr(lang, "photo_prompt"))
+		case "story_repost_start":
+			if !canUseStoryPublishing(botToken, adminID, config) {
+				sendSubscriptionMenu(botToken, adminID, "🔒 انتهت التجربة المجانية. اختر باقة لفتح نشر الستوري.")
+				break
+			}
+			if config.BusinessConnID == "" {
+				sendMenu(botToken, adminID, lang, tr(lang, "no_business_connection"))
+				break
+			}
+			config.State = "waiting_story_repost"
+			if !saveConfig(botToken, adminID, config, msgID) {
+				sendMenu(botToken, adminID, lang, "تعذر بدء إعادة النشر وحفظ الحالة. حاول مرة أخرى.")
+				break
+			}
+			sendSubMenu(botToken, adminID, lang, "🔁 أعد توجيه صورة أو فيديو من قناتك إلى هنا، أو أرسله مباشرة. سيتعرف البوت على نوع الوسيط ويعرض نتيجة النشر.\n\nيدعم النشر المباشر: الصور والفيديوهات حتى 60 ثانية. ملفات الصوت والملصقات وGIF والملفات الأخرى ليست قصصاً مدعومة مباشرة.")
 		case "post_story":
 			if config.BusinessConnID == "" {
 				sendMenu(botToken, adminID, lang, tr(lang, "no_business_connection"))
@@ -1722,6 +1738,67 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 					config.State = ""
 					saveConfig(botToken, chatID, config, msgID)
 					sendMenu(botToken, chatID, lang, tr(lang, "photo_updated"))
+				}
+			}
+		} else if config.State == "waiting_story_repost" {
+			if !canUseStoryPublishing(botToken, msg.From.ID, config) {
+				config.State = ""
+				saveConfig(botToken, chatID, config, msgID)
+				sendSubscriptionMenu(botToken, chatID, "🔒 انتهت التجربة المجانية. اختر باقة لفتح نشر الستوري.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			if config.BusinessConnID == "" {
+				config.State = ""
+				saveConfig(botToken, chatID, config, msgID)
+				sendMenu(botToken, chatID, lang, tr(lang, "no_business_connection"))
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			mediaType, fileID, duration := "", "", 0
+			switch {
+			case len(msg.Photo) > 0:
+				mediaType = "photo"
+				fileID = msg.Photo[len(msg.Photo)-1].FileID
+			case msg.Video != nil:
+				mediaType = "video"
+				fileID = msg.Video.FileID
+				duration = msg.Video.Duration
+			case msg.Document != nil && strings.EqualFold(msg.Document.MimeType, "video/mp4") && strings.HasSuffix(strings.ToLower(msg.Document.FileName), ".mp4"):
+				mediaType = "video"
+				fileID = msg.Document.FileID
+			}
+
+			if mediaType == "" {
+				detected := "وسيط غير معروف"
+				switch {
+				case msg.Animation != nil:
+					detected = "GIF / صورة متحركة"
+				case msg.Sticker != nil:
+					detected = "ملصق"
+				case msg.Audio != nil:
+					detected = "ملف صوتي"
+				case msg.Voice != nil:
+					detected = "رسالة صوتية"
+				case msg.Document != nil:
+					detected = "ملف: " + msg.Document.FileName
+				case strings.TrimSpace(msg.Text) != "":
+					detected = "رسالة نصية"
+				}
+				sendSubMenu(botToken, chatID, lang, "🔎 تعرّف البوت على نوع الرسالة: "+detected+"\n\nهذا النوع لا يمكن نشره مباشرة كقصة عبر Telegram Bot API. أرسل صورة أو فيديو MP4 بدلاً منه، أو ارجع إلى القائمة.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			if err := postBusinessStory(botToken, config.BusinessConnID, mediaType, fileID, duration, "86400", lang); err != nil {
+				sendSubMenu(botToken, chatID, lang, fmt.Sprintf("❌ تعذر إعادة نشر الوسيط كقصة: %s\n\nيمكنك إرسال وسيط آخر للمحاولة مجدداً.", err.Error()))
+			} else {
+				config.State = ""
+				if !saveConfig(botToken, chatID, config, msgID) {
+					sendMenu(botToken, chatID, lang, "✅ تم إرسال طلب نشر القصة إلى Telegram، لكن تعذر حفظ حالة البوت.")
+				} else {
+					sendMenu(botToken, chatID, lang, "✅ تمت إعادة نشر الوسيط كقصة بنجاح! ستبقى ظاهرة لمدة 24 ساعة.")
 				}
 			}
 		} else if strings.HasPrefix(config.State, "waiting_story_") {
