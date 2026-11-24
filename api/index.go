@@ -651,8 +651,9 @@ type BusinessConnectionResponse struct {
 }
 
 type apiResult struct {
-	Ok          bool   `json:"ok"`
-	Description string `json:"description"`
+	Ok          bool            `json:"ok"`
+	Description string          `json:"description"`
+	Result      json.RawMessage `json:"result"`
 }
 
 func isTelegramFormattingError(err error) bool {
@@ -2918,6 +2919,19 @@ func postMultipartBusinessAPI(token, method string, fields map[string]string, fi
 			res.Description = "استجابة غير ناجحة"
 		}
 		return fmt.Errorf("فشل طلب Telegram (HTTP %d): %s", resp.StatusCode, res.Description)
+	}
+
+	// Telegram returns the created Story in result. Keep the returned story ID
+	// in runtime logs so repeated posts can be distinguished during diagnosis.
+	if method == "postStory" && len(res.Result) > 0 {
+		var story struct {
+			ID int64 `json:"id"`
+		}
+		if err := json.Unmarshal(res.Result, &story); err == nil && story.ID != 0 {
+			log.Printf("✅ Telegram postStory succeeded; story_id=%d", story.ID)
+		} else {
+			log.Printf("⚠️ Telegram postStory succeeded but response result had no readable story ID: %s", string(res.Result))
+		}
 	}
 	return nil
 }
