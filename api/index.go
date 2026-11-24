@@ -411,7 +411,6 @@ type BotConfig struct {
 	Excluded       []int64 `json:"excluded"`
 	State          string  `json:"state"`
 	BusinessConnID string  `json:"business_conn_id"`
-	ManagedChannels []ManagedChannel `json:"managed_channels,omitempty"`
 	Lang           string  `json:"lang"`
 
 	// إعدادات التفاعلات
@@ -449,16 +448,6 @@ type StarPaymentRecord struct {
 	PaidAt int64 `json:"paid_at"`
 	SubscriptionUntil int64 `json:"subscription_until"`
 	ChargeID string `json:"charge_id,omitempty"`
-}
-
-type ManagedChannel struct {
-	ID int64 `json:"id"`
-	Title string `json:"title"`
-	Username string `json:"username,omitempty"`
-	CanPostStories bool `json:"can_post_stories"`
-	CanEditStories bool `json:"can_edit_stories"`
-	CanDeleteStories bool `json:"can_delete_stories"`
-	CheckedAt int64 `json:"checked_at"`
 }
 
 // 🆕 عنصر ستوري
@@ -700,54 +689,6 @@ func postTelegramJSON(token, method string, payload interface{}) (apiResult, err
 	return result, nil
 }
 
-type telegramChannelInfo struct {
-	ID int64 `json:"id"`
-	Type string `json:"type"`
-	Title string `json:"title"`
-	Username string `json:"username"`
-}
-type telegramMemberInfo struct {
-	Status string `json:"status"`
-	CanPostStories bool `json:"can_post_stories"`
-	CanEditStories bool `json:"can_edit_stories"`
-	CanDeleteStories bool `json:"can_delete_stories"`
-}
-func telegramGETResult(token, method, query string, out interface{}) error {
-	endpoint := fmt.Sprintf("https://api.telegram.org/bot%s/%s", token, method)
-	if query != "" { endpoint += "?" + query }
-	resp, err := httpClient.Get(endpoint); if err != nil { return fmt.Errorf("تعذر الاتصال بتليجرام") }; defer resp.Body.Close()
-	var envelope struct { Ok bool `json:"ok"`; Description string `json:"description"`; Result json.RawMessage `json:"result"` }
-	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil { return fmt.Errorf("تعذر قراءة استجابة Telegram") }
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 || !envelope.Ok { return fmt.Errorf("%s", envelope.Description) }
-	if err := json.Unmarshal(envelope.Result, out); err != nil { return fmt.Errorf("تعذر تحليل بيانات Telegram") }; return nil
-}
-func checkManagedChannel(token, identifier string) (ManagedChannel, error) {
-	var channel telegramChannelInfo
-	if err := telegramGETResult(token,"getChat","chat_id="+url.QueryEscape(identifier),&channel); err != nil { return ManagedChannel{},fmt.Errorf("لم أتمكن من العثور على القناة: %s",err.Error()) }
-	if channel.Type != "channel" { return ManagedChannel{},fmt.Errorf("المعرف الذي أرسلته ليس قناة Telegram؛ النوع: %s",channel.Type) }
-	var me struct { ID int64 `json:"id"` }
-	if err := telegramGETResult(token,"getMe","",&me); err != nil { return ManagedChannel{},fmt.Errorf("تعذر التحقق من هوية البوت: %s",err.Error()) }
-	var member telegramMemberInfo
-	query := "chat_id="+url.QueryEscape(strconv.FormatInt(channel.ID,10))+"&user_id="+strconv.FormatInt(me.ID,10)
-	if err := telegramGETResult(token,"getChatMember",query,&member); err != nil { return ManagedChannel{},fmt.Errorf("تعذر فحص عضوية البوت؛ أضفه مشرفاً ثم أعد المحاولة: %s",err.Error()) }
-	if member.Status!="administrator" && member.Status!="creator" { return ManagedChannel{},fmt.Errorf("البوت ليس مشرفاً في القناة. الحالة: %s",member.Status) }
-	if !member.CanPostStories { return ManagedChannel{},fmt.Errorf("البوت مشرف، لكن صلاحية نشر القصص غير مفعّلة. فعّل can_post_stories ثم أعد الفحص.") }
-	return ManagedChannel{ID:channel.ID,Title:channel.Title,Username:channel.Username,CanPostStories:member.CanPostStories,CanEditStories:member.CanEditStories,CanDeleteStories:member.CanDeleteStories,CheckedAt:time.Now().Unix()},nil
-}
-func permissionLabel(ok bool) string { if ok { return "✅" }; return "غير مفعّلة" }
-func channelDisplayName(ch ManagedChannel) string { name:=ch.Title; if ch.Username!="" { name+=" (@"+ch.Username+")" }; return name }
-func sendChannelStoryMenu(token string, chatID int64, cfg BotConfig) {
-	rows:=[][]map[string]interface{}{{{"text":"➕ إضافة قناة","callback_data":"channel_add","style":"success"},{"text":"📋 قنواتي","callback_data":"channel_list","style":"primary"}},{{"text":"🔄 إعادة فحص الصلاحيات","callback_data":"channel_refresh","style":"primary"}},{{"text":"📝 إنشاء قصة للقنوات","callback_data":"channel_publish_info","style":"primary"}},{{"text":"⬅️ رجوع","callback_data":"content_menu","style":"primary"}}}
-	msg:="📢 إدارة قصص القنوات\n\nالقنوات المضافة: "+strconv.Itoa(len(cfg.ManagedChannels))+"\nأضف القناة بعد جعل البوت مشرفاً وتفعيل صلاحية نشر القصص."
-	sendSimpleSubmenu(token,chatID,msg,rows)
-}
-func sendManagedChannelList(token string, chatID int64, cfg BotConfig) {
-	if len(cfg.ManagedChannels)==0 { sendSimpleSubmenu(token,chatID,"📋 لا توجد قنوات مضافة.",[][]map[string]interface{}{{{"text":"➕ إضافة قناة","callback_data":"channel_add","style":"success"}},{{"text":"⬅️ رجوع","callback_data":"channel_story_menu","style":"primary"}}}); return }
-	rows:=[][]map[string]interface{}{}
-	for _,ch:=range cfg.ManagedChannels { status:="❌"; if ch.CanPostStories { status="✅ نشر القصص" }; label:=channelDisplayName(ch); if len([]rune(label))>35 { label=string([]rune(label)[:35])+"…" }; rows=append(rows,[]map[string]interface{}{{"text":label+" — "+status,"callback_data":"channel_noop"},{"text":"🗑","callback_data":"channel_remove_"+strconv.FormatInt(ch.ID,10),"style":"danger"}}) }
-	rows=append(rows,[]map[string]interface{}{{"text":"➕ إضافة قناة","callback_data":"channel_add","style":"success"}},[]map[string]interface{}{{"text":"⬅️ رجوع","callback_data":"channel_story_menu","style":"primary"}})
-	sendSimpleSubmenu(token,chatID,"📋 القنوات المرتبطة بحسابك:",rows)
-}
 // ============== Handler الرئيسي ==============
 
 func Handler(w http.ResponseWriter, r *http.Request) {
@@ -956,7 +897,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				{{"text": "🧩 إنشاء تجميعة من 6 صور", "callback_data": "story_collage_start", "style": "success"}},
 				{{"text": tr(lang, "batch_story_btn"), "callback_data": "batch_story_menu", "style": "success"}},
 				{{"text": tr(lang, "post_story_btn"), "callback_data": "post_story", "style": "primary"}},
-				{{"text": "📢 نشر القصص في القنوات", "callback_data": "channel_story_menu", "style": "success"}},
 				{{"text": tr(lang, "back_btn"), "callback_data": "main_menu", "style": "primary"}},
 			})
 		case "account_menu":
@@ -1191,21 +1131,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			saveConfig(botToken, adminID, config, msgID)
 			sendSubMenu(botToken, adminID, lang, tr(lang, "voice_reply_prompt"))
 
-		case "channel_story_menu":
-			sendChannelStoryMenu(botToken,adminID,config)
-		case "channel_add":
-			config.State="waiting_channel_username"; if !saveConfig(botToken,adminID,config,msgID) { sendMessage(botToken,adminID,"تعذر حفظ حالة إضافة القناة."); break }
-			sendSubMenu(botToken,adminID,lang,"➕ أرسل @username القناة أو معرّفها الرقمي الذي يبدأ غالباً بـ -100.\n\nتأكد من إضافة البوت مشرفاً وتفعيل صلاحية نشر القصص.")
-		case "channel_list":
-			sendManagedChannelList(botToken,adminID,config)
-		case "channel_refresh":
-			updated:=make([]ManagedChannel,0,len(config.ManagedChannels)); for _,ch:=range config.ManagedChannels { identifier:=strconv.FormatInt(ch.ID,10); if ch.Username!="" { identifier="@"+ch.Username }; fresh,err:=checkManagedChannel(botToken,identifier); if err!=nil { sendMessage(botToken,adminID,"⚠️ "+channelDisplayName(ch)+": "+err.Error()); continue }; updated=append(updated,fresh) }; config.ManagedChannels=updated; if saveConfig(botToken,adminID,config,msgID) { sendManagedChannelList(botToken,adminID,config) } else { sendMessage(botToken,adminID,"تعذر حفظ نتائج فحص القنوات.") }
-		case "channel_publish_info":
-			sendSubMenu(botToken,adminID,lang,"📢 إدارة القنوات وفحص الصلاحيات متاحة. لكن مسار postStory الموجود في Bot API ينشر عبر اتصال Telegram Business ولا يقبل chat_id للقناة؛ لذلك لا يمكنني تفعيل نشر حقيقي للقنوات بهذا المسار أو إظهار نجاح وهمي.")
-		case "channel_noop":
-			sendManagedChannelList(botToken,adminID,config)
-		default:
-			if strings.HasPrefix(cb.Data,"channel_remove_") { id,err:=strconv.ParseInt(strings.TrimPrefix(cb.Data,"channel_remove_"),10,64); if err!=nil { sendMessage(botToken,adminID,"معرّف القناة غير صالح."); break }; kept:=make([]ManagedChannel,0,len(config.ManagedChannels)); for _,ch:=range config.ManagedChannels { if ch.ID!=id { kept=append(kept,ch) } }; config.ManagedChannels=kept; if saveConfig(botToken,adminID,config,msgID) { sendManagedChannelList(botToken,adminID,config) } else { sendMessage(botToken,adminID,"تعذر حفظ حذف القناة.") } }
 		case "story_collage_start":
 			if !canUseStoryPublishing(botToken, adminID, config) {
 				sendSubscriptionMenu(botToken, adminID, "🔒 انتهت التجربة المجانية. اختر باقة لفتح نشر الستوري.")
@@ -1667,10 +1592,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		// ===== معالجة إضافة عنصر للستوريات =====
 		} else if config.State == "waiting_channel_username" {
-			identifier:=strings.TrimSpace(msg.Text); if identifier=="" { sendSubMenu(botToken,chatID,lang,"أرسل @username القناة أو معرّفها الرقمي."); w.WriteHeader(http.StatusOK); return }
-			channel,err:=checkManagedChannel(botToken,identifier); if err!=nil { sendSubMenu(botToken,chatID,lang,"❌ لم تتم إضافة القناة.\n"+err.Error()+"\n\nبعد تصحيح الصلاحيات أرسل المعرف مجدداً."); w.WriteHeader(http.StatusOK); return }
-			found:=false; for i:=range config.ManagedChannels { if config.ManagedChannels[i].ID==channel.ID { config.ManagedChannels[i]=channel; found=true; break } }; if !found { config.ManagedChannels=append(config.ManagedChannels,channel) }; config.State=""
-			if !saveConfig(botToken,chatID,config,msgID) { sendMessage(botToken,chatID,"تعذر حفظ القناة. لم يتم تأكيد إضافتها.") } else { sendMessage(botToken,chatID,"✅ تمت إضافة القناة وفحص صلاحيات البوت بنجاح.\n\n"+channelDisplayName(channel)+"\n• نشر القصص: ✅\n• تعديل القصص: "+permissionLabel(channel.CanEditStories)+"\n• حذف القصص: "+permissionLabel(channel.CanDeleteStories)); sendManagedChannelList(botToken,chatID,config) }
+			config.State = ""
+			saveConfig(botToken, chatID, config, msgID)
+			sendSubMenu(botToken, chatID, lang, "تمت إزالة ميزة إدارة ونشر القصص في القنوات.")
 		} else if config.State == "waiting_batch_item" {
 			var fileID, mediaType string
 			var duration int
