@@ -1743,10 +1743,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			} else {
 				var err error
 				if msg.Video != nil {
-					err = postBusinessStory(botToken, config.BusinessConnID, "video", msg.Video.FileID, msg.Video.Duration, period, lang)
+					err = postBusinessStory(botToken, config.BusinessConnID, "video", msg.Video.FileID, msg.Video.Duration, period, false, lang)
 				} else {
 					fileID := msg.Photo[len(msg.Photo)-1].FileID
-					err = postBusinessStory(botToken, config.BusinessConnID, "photo", fileID, 0, period, lang)
+					err = postBusinessStory(botToken, config.BusinessConnID, "photo", fileID, 0, period, false, lang)
 				}
 				if err != nil {
 					sendSubMenu(botToken, chatID, lang, fmt.Sprintf(tr(lang, "fail_story"), err.Error()))
@@ -3001,8 +3001,8 @@ func setBusinessAccountProfilePhoto(token, businessConnID, fileID string) error 
 	return postMultipartBusinessAPI(token, "setBusinessAccountProfilePhoto", fields, "photo", "photo.jpg", data)
 }
 
-// نشر قصة واحدة على الملف الشخصي (post_to_chat_page = true)
-func postBusinessStory(token, businessConnID, mediaType, fileID string, durationSeconds int, activePeriod string, lang string) error {
+// Publish a Business Story. postToChatPage controls whether it is also retained on the chat page after expiry.
+func postBusinessStory(token, businessConnID, mediaType, fileID string, durationSeconds int, activePeriod string, postToChatPage bool, lang string) error {
 	if mediaType == "video" && durationSeconds > 60 {
 		return fmt.Errorf("%s", tr(lang, "video_too_long_error"))
 	}
@@ -3033,7 +3033,7 @@ func postBusinessStory(token, businessConnID, mediaType, fileID string, duration
 		"business_connection_id": businessConnID,
 		"content":                contentJSON,
 		"active_period":          activePeriod,
-		"post_to_chat_page":      "true", // 🆕 النشر على الملف الشخصي
+		"post_to_chat_page":      strconv.FormatBool(postToChatPage),
 	}
 	return postMultipartBusinessAPI(token, "postStory", fields, "content", fileName, data)
 }
@@ -3048,6 +3048,7 @@ func publishBatchStories(token, businessConnID string, items []StoryItem, lang s
 			item.FileID,
 			item.Duration,
 			item.ActivePeriod,
+			false,
 			lang,
 		)
 		if err != nil {
