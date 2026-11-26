@@ -2340,7 +2340,7 @@ func customerSmartReplyControl(enabled bool) (string, map[string]interface{}) {
 
 func sendCustomerSmartReplyControl(token string, chatID int64, businessConnectionID string, enabled bool) {
 	text, keyboard := customerSmartReplyControl(enabled)
-	if _, err := callBusinessAPI(token,"sendMessage",map[string]interface{}{"chat_id":chatID,"business_connection_id":businessConnectionID,"text":text,"reply_markup":keyboard}); err != nil {
+	if err := callBusinessAPI(token,"sendMessage",map[string]interface{}{"chat_id":chatID,"business_connection_id":businessConnectionID,"text":text,"reply_markup":keyboard}); err != nil {
 		log.Printf("تعذر إرسال زر التحكم بالرد الذكي للعميل %d: %v",chatID,err)
 	}
 }
