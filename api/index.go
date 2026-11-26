@@ -818,7 +818,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			if !saveConfig(botToken, ownerID, cfg, cfgMsgID) { answerCallbackWithText(botToken, cb.ID, "تعذر حفظ اختيارك. لم تتغير الحالة."); w.WriteHeader(http.StatusOK); return }
 			newState := !current
 			controlText, keyboard := customerSmartReplyControl(newState)
-			_, editErr := callBusinessAPI(botToken, "editMessageText", map[string]interface{}{"chat_id":cb.Message.Chat.ID,"message_id":cb.Message.MessageID,"business_connection_id":cb.Message.BusinessConnectionID,"text":controlText,"reply_markup":keyboard})
+			editErr := callBusinessAPI(botToken, "editMessageText", map[string]interface{}{"chat_id":cb.Message.Chat.ID,"message_id":cb.Message.MessageID,"business_connection_id":cb.Message.BusinessConnectionID,"text":controlText,"reply_markup":keyboard})
 			if editErr != nil { log.Printf("تم حفظ حالة الرد الذكي للعميل %d لكن تعذر تحديث زر التحكم: %v", cb.Message.Chat.ID, editErr) }
 			answerCallbackWithText(botToken, cb.ID, map[bool]string{true:"تم تشغيل الرد الذكي في هذه المحادثة.",false:"تم إيقاف الرد الذكي في هذه المحادثة."}[newState])
 			w.WriteHeader(http.StatusOK); return
