@@ -150,7 +150,25 @@ func buildSmartReplyInput(botToken string, msg *BusinessMessage) (interface{}, e
 	return parts, nil
 }
 
-func generateSmartReplyWithContent(customerContent interface{}) (string, error) {
+func buildCustomerSmartReplySystemPrompt(preferences []CustomerPreferences) string {
+	prompt := "أنت مساعد يكتب رداً قصيراً وطبيعياً نيابة عن صاحب حساب Telegram Business. افهم النصوص والصور والصوت والفيديو المرفق إن كان النموذج يدعمها. اكتب بلغة العميل، وإذا كانت الرسالة بالعربية فاستخدم عربية طبيعية ولهجة عراقية خفيفة عند ملاءمتها. أخرج نص الرد فقط دون عناوين أو علامات اقتباس. لا تخترع أسعاراً أو وعوداً أو معلومات غير معروفة، ولا تدّعِ أنك نفذت إجراءً. إذا لم تتمكن من فهم الوسائط، اطلب توضيحاً بلطف. إذا كانت الرسالة شكوى أو طلباً حساساً، اقترح رداً مهذباً يوضح أن صاحب الحساب سيتابع الأمر."
+	if len(preferences) == 0 { return prompt }
+	p := preferences[0]
+	switch p.Language {
+	case "ar": prompt += " أجب باللغة العربية."
+	case "en": prompt += " Answer in English."
+	}
+	switch p.Tone {
+	case "friendly": prompt += " استخدم أسلوباً ودوداً ودافئاً."
+	case "formal": prompt += " استخدم أسلوباً رسمياً ومهنياً."
+	case "iraqi": prompt += " استخدم اللهجة العراقية الطبيعية."
+	case "concise": prompt += " اجعل الرد مختصراً جداً ومباشراً."
+	}
+	if p.SafeMode { prompt += " وضع الرد الآمن مفعّل: إذا لم تكن المعلومة واضحة أو مؤكدة، لا تخمّن؛ أخبر العميل أن صاحب الحساب سيتابع معه." }
+	return prompt
+}
+
+func generateSmartReplyWithContent(customerContent interface{}, preferences ...CustomerPreferences) (string, error) {
 	apiKey := strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
 	if apiKey == "" {
 		return "", fmt.Errorf("مفتاح OpenRouter غير مضبوط في متغيرات Vercel: OPENROUTER_API_KEY")
@@ -167,7 +185,7 @@ func generateSmartReplyWithContent(customerContent interface{}) (string, error) 
 		Messages: []openRouterMessage{
 			{
 				Role: "system",
-				Content: "أنت مساعد يكتب رداً قصيراً وطبيعياً نيابة عن صاحب حساب Telegram Business. افهم النصوص والصور والصوت والفيديو المرفق إن كان النموذج يدعمها. اكتب بلغة العميل، وإذا كانت الرسالة بالعربية فاستخدم عربية طبيعية ولهجة عراقية خفيفة عند ملاءمتها. أخرج نص الرد فقط دون عناوين أو علامات اقتباس. لا تخترع أسعاراً أو وعوداً أو معلومات غير معروفة، ولا تدّعِ أنك نفذت إجراءً. إذا لم تتمكن من فهم الوسائط، اطلب توضيحاً بلطف. إذا كانت الرسالة شكوى أو طلباً حساساً، اقترح رداً مهذباً يوضح أن صاحب الحساب سيتابع الأمر.",
+                Content: buildCustomerSmartReplySystemPrompt(preferences),
 			},
 			{Role: "user", Content: customerContent},
 		},
