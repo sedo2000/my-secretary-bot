@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"bytes"
+	"bytes"\n\t"encoding/base64"\n\t"path/filepath"\n\t"unicode/utf8"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,8 +27,8 @@ type openRouterRequest struct {
 }
 
 type openRouterMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string      `json:"role"`
+	Content interface{} `json:"content"`
 }
 
 type openRouterResponse struct {
@@ -41,18 +41,118 @@ type openRouterResponse struct {
 }
 
 func generateSmartReply(customerMessage string) (string, error) {
+	return generateSmartReplyWithContent(strings.TrimSpace(customerMessage))
+}
+
+const maxSmartReplyMediaBytes = 8 << 20
+
+func hasSmartReplyPayload(msg *BusinessMessage) bool {
+	return msg != nil && (strings.TrimSpace(msg.Text) != "" || strings.TrimSpace(msg.Caption) != "" ||
+		len(msg.Photo) > 0 || msg.Video != nil || msg.Voice != nil || msg.Audio != nil ||
+		msg.Document != nil || msg.Animation != nil || msg.Sticker != nil)
+}
+
+func telegramFileBytes(botToken, fileID string) ([]byte, string, error) {
+	if strings.TrimSpace(fileID) == "" {
+		return nil, "", fmt.Errorf("معرّف الملف غير متوفر")
+	}
+	fileReq, err := http.NewRequest(http.MethodGet, "https://api.telegram.org/bot"+botToken+"/getFile?file_id="+url.QueryEscape(fileID), nil)
+	if err != nil { return nil, "", fmt.Errorf("تعذر تجهيز طلب تنزيل الملف") }
+	fileResp, err := aiHTTPClient.Do(fileReq)
+	if err != nil { return nil, "", fmt.Errorf("تعذر الاتصال بتليجرام لتنزيل الملف") }
+	defer fileResp.Body.Close()
+	var fileResult struct {
+		Ok bool `json:"ok"`
+		Description string `json:"description"`
+		Result struct { FilePath string `json:"file_path"` } `json:"result"`
+	}
+	if err := json.NewDecoder(io.LimitReader(fileResp.Body, 1<<20)).Decode(&fileResult); err != nil || !fileResult.Ok || fileResult.Result.FilePath == "" {
+		if fileResult.Description != "" { return nil, "", fmt.Errorf("تعذر الحصول على الملف من Telegram: %s", fileResult.Description) }
+		return nil, "", fmt.Errorf("تعذر قراءة بيانات الملف من Telegram")
+	}
+	downloadURL := "https://api.telegram.org/file/bot"+botToken+"/"+fileResult.Result.FilePath
+	downloadReq, err := http.NewRequest(http.MethodGet, downloadURL, nil)
+	if err != nil { return nil, "", fmt.Errorf("تعذر تجهيز تنزيل الملف") }
+	downloadResp, err := aiHTTPClient.Do(downloadReq)
+	if err != nil { return nil, "", fmt.Errorf("تعذر تنزيل الملف من Telegram") }
+	defer downloadResp.Body.Close()
+	if downloadResp.StatusCode < 200 || downloadResp.StatusCode >= 300 { return nil, "", fmt.Errorf("فشل تنزيل الملف من Telegram (HTTP %d)", downloadResp.StatusCode) }
+	data, err := io.ReadAll(io.LimitReader(downloadResp.Body, maxSmartReplyMediaBytes+1))
+	if err != nil { return nil, "", fmt.Errorf("تعذر قراءة الملف") }
+	if len(data) > maxSmartReplyMediaBytes { return nil, "", fmt.Errorf("حجم الملف أكبر من الحد المدعوم حالياً (8 ميغابايت)") }
+	return data, fileResult.Result.FilePath, nil
+}
+
+func smartReplyDataURI(data []byte, contentType string) string {
+	if contentType == "" { contentType = "application/octet-stream" }
+	return "data:"+contentType+";base64,"+base64.StdEncoding.EncodeToString(data)
+}
+
+func buildSmartReplyInput(botToken string, msg *BusinessMessage) (interface{}, error) {
+	parts := make([]interface{}, 0, 4)
+	textParts := make([]string, 0, 2)
+	if strings.TrimSpace(msg.Text) != "" { textParts = append(textParts, strings.TrimSpace(msg.Text)) }
+	if strings.TrimSpace(msg.Caption) != "" { textParts = append(textParts, "نص مرفق بالوسائط: "+strings.TrimSpace(msg.Caption)) }
+
+	addImage := func(fileID, mimeType, label string) error {
+		data, _, err := telegramFileBytes(botToken, fileID)
+		if err != nil { return err }
+		if mimeType == "" { mimeType = "image/jpeg" }
+		parts = append(parts, map[string]interface{}{"type":"image_url","image_url":map[string]interface{}{"url":smartReplyDataURI(data,mimeType)}})
+		textParts = append(textParts, label)
+		return nil
+	}
+
+	switch {
+	case len(msg.Photo) > 0:
+		photo := msg.Photo[len(msg.Photo)-1]
+		if err := addImage(photo.FileID, "image/jpeg", "أرسل العميل صورة. افحص الصورة بصرياً وأجب عن سؤاله."); err != nil { return nil, err }
+	case msg.Sticker != nil:
+		if msg.Sticker.IsAnimated { textParts = append(textParts, "أرسل العميل ملصقاً متحركاً؛ لا يمكن فك حركته في هذه الاستضافة. رمز الملصق: "+msg.Sticker.Emoji) } else if err := addImage(msg.Sticker.FileID, "image/webp", "أرسل العميل ملصقاً ثابتاً. افهم الصورة إن أمكن."); err != nil { return nil, err }
+	case msg.Voice != nil || msg.Audio != nil:
+		fileID, format := "", "ogg"
+		if msg.Voice != nil { fileID = msg.Voice.FileID } else {
+			fileID = msg.Audio.FileID
+			if strings.Contains(strings.ToLower(msg.Audio.Title), ".") { format = strings.TrimPrefix(strings.ToLower(msg.Audio.Title[strings.LastIndex(msg.Audio.Title, "."):]), ".") }
+		}
+		data, filePath, err := telegramFileBytes(botToken, fileID)
+		if err != nil { return nil, err }
+		if ext := strings.ToLower(filePath[strings.LastIndex(filePath, ".")+1:]); ext != "" { format = ext }
+		parts = append(parts, map[string]interface{}{"type":"input_audio","input_audio":map[string]interface{}{"data":base64.StdEncoding.EncodeToString(data),"format":format}})
+		textParts = append(textParts, "أرسل العميل رسالة صوتية/ملفاً صوتياً. استمع إلى محتواه، واستخرج الكلام والمعنى ثم أجب بلغة مناسبة.")
+	case msg.Video != nil:
+		data, filePath, err := telegramFileBytes(botToken, msg.Video.FileID)
+		if err != nil { return nil, err }
+		mimeType := "video/mp4"
+		if strings.HasSuffix(strings.ToLower(filePath), ".mov") { mimeType = "video/quicktime" }
+		parts = append(parts, map[string]interface{}{"type":"video_url","video_url":map[string]interface{}{"url":smartReplyDataURI(data,mimeType)}})
+		textParts = append(textParts, "أرسل العميل فيديو. حلل محتواه المرئي والصوتي إذا كان النموذج يدعم الفيديو.")
+	case msg.Document != nil:
+		data, filePath, err := telegramFileBytes(botToken, msg.Document.FileID)
+		if err != nil { return nil, err }
+		ext := strings.ToLower(filePath)
+		if strings.HasSuffix(ext, ".txt") || strings.HasSuffix(ext, ".csv") || strings.HasSuffix(ext, ".json") || strings.HasSuffix(ext, ".md") || strings.HasSuffix(ext, ".log") {
+			if !utf8.Valid(data) { return nil, fmt.Errorf("المستند النصي ليس بترميز UTF-8 مدعوم") }
+			content := string(data)
+			if len([]rune(content)) > 12000 { content = string([]rune(content)[:12000]) }
+			textParts = append(textParts, "محتوى المستند "+filepath.Base(filePath)+":\n"+content)
+		} else {
+			return nil, fmt.Errorf("نوع المستند %s غير مدعوم للقراءة حالياً؛ المدعوم نصوص TXT وCSV وJSON وMD وLOG", filepath.Base(filePath))
+		}
+	case msg.Animation != nil:
+		return nil, fmt.Errorf("ملفات GIF المتحركة غير مدعومة للتحليل حالياً؛ أرسلها كفيديو أو صورة ثابتة")
+	}
+	if len(textParts) == 0 { textParts = append(textParts, "أرسل العميل رسالة لا تحتوي نصاً قابلاً للاستخراج. اطلب منه توضيح طلبه بلطف.") }
+	parts = append([]interface{}{map[string]interface{}{"type":"text","text":strings.Join(textParts,"\n\n")}}, parts...)
+	return parts, nil
+}
+
+func generateSmartReplyWithContent(customerContent interface{}) (string, error) {
 	apiKey := strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
 	if apiKey == "" {
 		return "", fmt.Errorf("مفتاح OpenRouter غير مضبوط في متغيرات Vercel: OPENROUTER_API_KEY")
 	}
-	customerMessage = strings.TrimSpace(customerMessage)
-	if customerMessage == "" {
-		return "", fmt.Errorf("رسالة العميل فارغة")
-	}
-	if len([]rune(customerMessage)) > 3000 {
-		customerMessage = string([]rune(customerMessage)[:3000])
-	}
-	model := strings.TrimSpace(os.Getenv("OPENROUTER_MODEL"))
+		model := strings.TrimSpace(os.Getenv("OPENROUTER_MODEL"))
 	if model == "" {
 		model = defaultOpenRouterModel
 	}
@@ -64,9 +164,9 @@ func generateSmartReply(customerMessage string) (string, error) {
 		Messages: []openRouterMessage{
 			{
 				Role: "system",
-				Content: "أنت مساعد يكتب مسودة رد قصيرة وطبيعية نيابة عن صاحب حساب Telegram Business. اكتب بلغة العميل، وإذا كانت الرسالة بالعربية فاستخدم عربية طبيعية ولهجة عراقية خفيفة عند ملاءمتها. أخرج نص الرد فقط دون عناوين أو علامات اقتباس. لا تخترع أسعاراً أو وعوداً أو معلومات غير معروفة، ولا تدّعِ أنك نفذت إجراءً. إذا كانت الرسالة شكوى أو طلباً حساساً، اقترح رداً مهذباً يوضح أن صاحب الحساب سيتابع الأمر.",
+				Content: "أنت مساعد يكتب رداً قصيراً وطبيعياً نيابة عن صاحب حساب Telegram Business. افهم النصوص والصور والصوت والفيديو المرفق إن كان النموذج يدعمها. اكتب بلغة العميل، وإذا كانت الرسالة بالعربية فاستخدم عربية طبيعية ولهجة عراقية خفيفة عند ملاءمتها. أخرج نص الرد فقط دون عناوين أو علامات اقتباس. لا تخترع أسعاراً أو وعوداً أو معلومات غير معروفة، ولا تدّعِ أنك نفذت إجراءً. إذا لم تتمكن من فهم الوسائط، اطلب توضيحاً بلطف. إذا كانت الرسالة شكوى أو طلباً حساساً، اقترح رداً مهذباً يوضح أن صاحب الحساب سيتابع الأمر.",
 			},
-			{Role: "user", Content: customerMessage},
+			{Role: "user", Content: customerContent},
 		},
 	}
 	body, err := json.Marshal(requestBody)
