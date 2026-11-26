@@ -2,15 +2,18 @@ package handler
 
 import (
 	"bytes"
-	"encoding/base64"\n\t"encoding/json"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"os"\n\t"path/filepath"
+	"os"
+	"path/filepath"
 	"strings"
-	"time"\n\t"unicode/utf8"
+	"time"
+	"unicode/utf8"
 )
 
 const (
