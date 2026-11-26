@@ -652,6 +652,7 @@ type CallbackQuery struct {
 	Data    string  `json:"data"`
 	From    struct {
 		ID int64 `json:"id"`
+		FirstName string `json:"first_name"`
 	} `json:"from"`
 }
 
