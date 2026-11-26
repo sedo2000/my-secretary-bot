@@ -423,6 +423,7 @@ type BotConfig struct {
 	PendingReplyPreview        string `json:"pending_reply_preview,omitempty"`
 	SmartReplyEnabled          bool   `json:"smart_reply_enabled,omitempty"`
 	SmartReplyChatOverrides   map[int64]bool `json:"smart_reply_chat_overrides,omitempty"`
+	CustomerControlLastSent   map[int64]int64 `json:"customer_control_last_sent,omitempty"`
 	PendingSmartReply          string `json:"pending_smart_reply,omitempty"`
 	PendingSmartChatID         int64  `json:"pending_smart_chat_id,omitempty"`
 	PendingSmartBusinessConnID string `json:"pending_smart_business_conn_id,omitempty"`
@@ -1832,7 +1833,20 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		customerName := msg.From.FirstName
 		if customerName == "" { customerName = "صديقي" }
 		customerSmartEnabled := smartReplyEnabledForChat(config, customerChatID)
-		sendCustomerSmartReplyControl(botToken, customerChatID, msg.BusinessConnectionID, customerSmartEnabled)
+		// إظهار زر التحكم بحد أقصى مرة كل ساعتين لكل عميل، عند وصول رسالة جديدة.
+		nowUnix := time.Now().Unix()
+		lastControlSent := config.CustomerControlLastSent[customerChatID]
+		if lastControlSent == 0 || nowUnix-lastControlSent >= int64(2*time.Hour/time.Second) {
+			if sendCustomerSmartReplyControl(botToken, customerChatID, msg.BusinessConnectionID, customerSmartEnabled) {
+				if config.CustomerControlLastSent == nil {
+					config.CustomerControlLastSent = make(map[int64]int64)
+				}
+				config.CustomerControlLastSent[customerChatID] = nowUnix
+				if !saveConfig(botToken, adminID, config, configMsgID) {
+					log.Printf("تم إرسال زر التحكم للعميل %d لكن تعذر حفظ وقت الإرسال", customerChatID)
+				}
+			}
+		}
 
 		// 🆕 معالجة الرد على الستوري (Story Mention)
 		if msg.Story != nil && config.ReplyToStoryMention {
@@ -2338,11 +2352,13 @@ func customerSmartReplyControl(enabled bool) (string, map[string]interface{}) {
 	return stateText+"\nيمكنك تغيير هذا الإعداد في أي وقت.", keyboard
 }
 
-func sendCustomerSmartReplyControl(token string, chatID int64, businessConnectionID string, enabled bool) {
+func sendCustomerSmartReplyControl(token string, chatID int64, businessConnectionID string, enabled bool) bool {
 	text, keyboard := customerSmartReplyControl(enabled)
 	if err := callBusinessAPI(token,"sendMessage",map[string]interface{}{"chat_id":chatID,"business_connection_id":businessConnectionID,"text":text,"reply_markup":keyboard}); err != nil {
 		log.Printf("تعذر إرسال زر التحكم بالرد الذكي للعميل %d: %v",chatID,err)
+		return false
 	}
+	return true
 }
 
 func answerCallbackWithText(token, callbackID, answer string) {
