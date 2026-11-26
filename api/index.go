@@ -402,6 +402,13 @@ func translateText(text, targetLang string) (string, string, error) {
 
 // ============== الهياكل ==============
 
+type CustomerPreferences struct {
+	Language   string `json:"language,omitempty"`
+	Tone       string `json:"tone,omitempty"`
+	SafeMode   bool   `json:"safe_mode,omitempty"`
+	PausedUntil int64 `json:"paused_until,omitempty"`
+}
+
 type BotConfig struct {
 	IsStopped      bool    `json:"is_stopped"`
 	AutoReply      string  `json:"auto_reply"`
@@ -424,6 +431,7 @@ type BotConfig struct {
 	SmartReplyEnabled          bool   `json:"smart_reply_enabled,omitempty"`
 	SmartReplyChatOverrides   map[int64]bool `json:"smart_reply_chat_overrides,omitempty"`
 	CustomerControlLastSent   map[int64]int64 `json:"customer_control_last_sent,omitempty"`
+	CustomerPreferences       map[int64]CustomerPreferences `json:"customer_preferences,omitempty"`
 	PendingSmartReply          string `json:"pending_smart_reply,omitempty"`
 	PendingSmartChatID         int64  `json:"pending_smart_chat_id,omitempty"`
 	PendingSmartBusinessConnID string `json:"pending_smart_business_conn_id,omitempty"`
@@ -770,7 +778,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if update.CallbackQuery != nil {
 		cb := update.CallbackQuery
 		log.Printf("استلام callback: data=%q from=%d chat=%d", cb.Data, cb.From.ID, cb.Message.Chat.ID)
-		if cb.Data != "customer_smart_reply_toggle" {
+		if !strings.HasPrefix(cb.Data, "customer_") {
 			answerCallback(botToken, cb.ID)
 		}
 		if cb.Message.Chat.ID == 0 || cb.Message.MessageID == 0 {
@@ -807,6 +815,90 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if strings.HasPrefix(cb.Data, "customer_") && cb.Data != "customer_smart_reply_toggle" {
+			if cb.Message.Chat.ID != cb.From.ID || cb.Message.BusinessConnectionID == "" {
+				answerCallbackWithText(botToken, cb.ID, "هذا الخيار متاح من محادثتك مع الحساب فقط.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			ownerID := getAdminIDFromBusinessConn(botToken, cb.Message.BusinessConnectionID)
+			if ownerID == 0 {
+				answerCallbackWithText(botToken, cb.ID, "تعذر تحديد صاحب الحساب حالياً.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			cfg, cfgMsgID := getConfig(botToken, ownerID)
+			if cfgMsgID < 0 {
+				answerCallbackWithText(botToken, cb.ID, "تعذر قراءة الإعدادات. حاول لاحقاً.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			customerID := cb.Message.Chat.ID
+			if cfg.CustomerPreferences == nil { cfg.CustomerPreferences = make(map[int64]CustomerPreferences) }
+			prefs := cfg.CustomerPreferences[customerID]
+			message := ""
+			switch cb.Data {
+			case "customer_panel":
+				message = "إعدادات المساعد الذكي"
+			case "customer_lang_ar":
+				prefs.Language = "ar"
+				message = "تم اختيار اللغة العربية."
+			case "customer_lang_en":
+				prefs.Language = "en"
+				message = "English selected."
+			case "customer_tone_friendly":
+				prefs.Tone = "friendly"
+				message = "تم اختيار الأسلوب الودود."
+			case "customer_tone_formal":
+				prefs.Tone = "formal"
+				message = "تم اختيار الأسلوب الرسمي."
+			case "customer_tone_iraqi":
+				prefs.Tone = "iraqi"
+				message = "تم اختيار اللهجة العراقية."
+			case "customer_tone_concise":
+				prefs.Tone = "concise"
+				message = "تم اختيار الردود المختصرة."
+			case "customer_safe_toggle":
+				prefs.SafeMode = !prefs.SafeMode
+				if prefs.SafeMode { message = "تم تفعيل وضع الرد الآمن." } else { message = "تم إيقاف وضع الرد الآمن." }
+			case "customer_pause_1", "customer_pause_3", "customer_pause_24":
+				hours := int64(1)
+				if cb.Data == "customer_pause_3" { hours = 3 }
+				if cb.Data == "customer_pause_24" { hours = 24 }
+				prefs.PausedUntil = time.Now().Unix() + hours*3600
+				message = fmt.Sprintf("تم إيقاف الرد الذكي لمدة %d ساعة.", hours)
+			case "customer_resume":
+				prefs.PausedUntil = 0
+				message = "تم استئناف الرد الذكي."
+			case "customer_human":
+				message = "تم إرسال طلبك إلى صاحب الحساب."
+				sendMessage(botToken, ownerID, fmt.Sprintf("🙋 طلب العميل التحدث معك.\nمعرّف المحادثة: %d\nاسم العميل: %s", customerID, cb.From.FirstName))
+			case "customer_report":
+				message = "تم إرسال بلاغك إلى صاحب الحساب."
+				sendMessage(botToken, ownerID, fmt.Sprintf("🚩 أبلغ العميل عن رد غير مناسب.\nمعرّف المحادثة: %d\nيرجى مراجعة المحادثة.", customerID))
+			case "customer_rate_1", "customer_rate_2", "customer_rate_3", "customer_rate_4", "customer_rate_5":
+				rating := strings.TrimPrefix(cb.Data, "customer_rate_")
+				message = "شكراً لتقييمك!"
+				sendMessage(botToken, ownerID, fmt.Sprintf("⭐ تقييم العميل للمساعد: %s/5\nمعرّف المحادثة: %d", rating, customerID))
+			default:
+				answerCallbackWithText(botToken, cb.ID, "هذا الخيار غير متاح حالياً.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			cfg.CustomerPreferences[customerID] = prefs
+			if !saveConfig(botToken, ownerID, cfg, cfgMsgID) {
+				answerCallbackWithText(botToken, cb.ID, "تعذر حفظ الإعداد. لم يتم تطبيق التغيير.")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			answerCallbackWithText(botToken, cb.ID, message)
+			panelText, panelKeyboard := customerPreferencesPanel(prefs)
+			if cb.Data == "customer_panel" || strings.HasPrefix(cb.Data, "customer_lang_") || strings.HasPrefix(cb.Data, "customer_tone_") || cb.Data == "customer_safe_toggle" || strings.HasPrefix(cb.Data, "customer_pause_") || cb.Data == "customer_resume" {
+				_ = callBusinessAPI(botToken, "sendMessage", map[string]interface{}{"chat_id": customerID, "business_connection_id": cb.Message.BusinessConnectionID, "text": panelText, "reply_markup": panelKeyboard})
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		if cb.Data == "customer_smart_reply_toggle" {
 			if cb.Message.Chat.ID != cb.From.ID || cb.Message.BusinessConnectionID == "" { w.WriteHeader(http.StatusOK); return }
 			ownerID := getAdminIDFromBusinessConn(botToken, cb.Message.BusinessConnectionID)
@@ -1833,6 +1925,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		customerName := msg.From.FirstName
 		if customerName == "" { customerName = "صديقي" }
 		customerSmartEnabled := smartReplyEnabledForChat(config, customerChatID)
+		customerPrefs := config.CustomerPreferences[customerChatID]
+		customerPaused := customerPrefs.PausedUntil > time.Now().Unix()
 		// إظهار زر التحكم بحد أقصى مرة كل ساعتين لكل عميل، عند وصول رسالة جديدة.
 		nowUnix := time.Now().Unix()
 		lastControlSent := config.CustomerControlLastSent[customerChatID]
@@ -1870,7 +1964,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// الرد الذكي يعالج النصوص والوسائط المدعومة قبل مسار الرد الصوتي التقليدي.
-		if customerSmartEnabled && msg.Chat.Type == "private" && hasSmartReplyPayload(msg) {
+		if customerSmartEnabled && !customerPaused && msg.Chat.Type == "private" && hasSmartReplyPayload(msg) {
 			userContent, contentErr := buildSmartReplyInput(botToken, msg)
 			if contentErr != nil {
 				log.Printf("تعذر تجهيز رسالة ذكية للمحادثة %d: %v", customerChatID, contentErr)
@@ -1878,7 +1972,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				return
 			}
-			suggestedReply, aiErr := generateSmartReplyWithContent(userContent)
+			suggestedReply, aiErr := generateSmartReplyWithContent(userContent, customerPrefs)
 			if aiErr != nil {
 				log.Printf("تعذر إنشاء رد ذكي للمحادثة %d: %v", customerChatID, aiErr)
 				sendMessage(botToken, adminID, fmt.Sprintf("⚠️ تعذر إنشاء الرد الذكي؛ لم يتم إرسال رد للعميل.\nالسبب: %s", aiErr))
@@ -2348,8 +2442,31 @@ func smartReplyEnabledForChat(cfg BotConfig, chatID int64) bool {
 func customerSmartReplyControl(enabled bool) (string, map[string]interface{}) {
 	buttonText, stateText, style := "🛑 إيقاف الرد الذكي", "🟢 الرد الذكي مفعّل في هذه المحادثة.", "danger"
 	if !enabled { buttonText, stateText, style = "🟢 تشغيل الرد الذكي", "🔴 الرد الذكي متوقف في هذه المحادثة.", "success" }
-	keyboard := map[string]interface{}{"inline_keyboard":[][]map[string]interface{}{{{"text":buttonText,"callback_data":"customer_smart_reply_toggle","style":style}}}}
+	keyboard := map[string]interface{}{"inline_keyboard":[][]map[string]interface{}{{{"text":buttonText,"callback_data":"customer_smart_reply_toggle","style":style}},{{"text":"⚙️ إعدادات المساعد","callback_data":"customer_panel"}}}}
 	return stateText+"\nيمكنك تغيير هذا الإعداد في أي وقت.", keyboard
+}
+
+func customerPreferencesPanel(p CustomerPreferences) (string, map[string]interface{}) {
+	language := "تلقائي"
+	if p.Language == "ar" { language = "العربية" } else if p.Language == "en" { language = "English" }
+	tone := "افتراضي"
+	switch p.Tone { case "friendly": tone = "ودود"; case "formal": tone = "رسمي"; case "iraqi": tone = "عراقي"; case "concise": tone = "مختصر" }
+	safe := "متوقف"
+	if p.SafeMode { safe = "مفعّل" }
+	pause := "غير متوقف"
+	if p.PausedUntil > time.Now().Unix() { pause = "متوقف مؤقتاً" }
+	text := fmt.Sprintf("⚙️ إعدادات المساعد الذكي\nاللغة: %s\nالأسلوب: %s\nوضع الرد الآمن: %s\nحالة الإيقاف المؤقت: %s", language, tone, safe, pause)
+	keyboard := map[string]interface{}{"inline_keyboard": [][]map[string]interface{}{
+		{{"text":"🌐 العربية","callback_data":"customer_lang_ar"},{"text":"🌐 English","callback_data":"customer_lang_en"}},
+		{{"text":"😊 ودود","callback_data":"customer_tone_friendly"},{"text":"👔 رسمي","callback_data":"customer_tone_formal"}},
+		{{"text":"🇮🇶 عراقي","callback_data":"customer_tone_iraqi"},{"text":"✂️ مختصر","callback_data":"customer_tone_concise"}},
+		{{"text":"🛡️ تبديل وضع الرد الآمن","callback_data":"customer_safe_toggle"}},
+		{{"text":"⏸️ ساعة","callback_data":"customer_pause_1"},{"text":"⏸️ 3 ساعات","callback_data":"customer_pause_3"},{"text":"⏸️ 24 ساعة","callback_data":"customer_pause_24"}},
+		{{"text":"▶️ استئناف الرد","callback_data":"customer_resume"}},
+		{{"text":"👤 التحدث مع صاحب الحساب","callback_data":"customer_human"}},
+		{{"text":"⭐ تقييم المساعد","callback_data":"customer_rate_5"},{"text":"🚩 الإبلاغ عن رد","callback_data":"customer_report"}},
+	}}
+	return text, keyboard
 }
 
 func sendCustomerSmartReplyControl(token string, chatID int64, businessConnectionID string, enabled bool) bool {
