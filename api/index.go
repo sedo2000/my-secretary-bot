@@ -501,11 +501,16 @@ type BusinessMessage struct {
 	IsOutgoing           bool   `json:"is_outgoing"`
 	BusinessConnectionID string `json:"business_connection_id"`
 
-	Story    *Story          `json:"story"`
-	Reaction *ReactionUpdate `json:"reaction"`
-	Voice    *Voice          `json:"voice"`
-	Photo    []PhotoSize     `json:"photo"`
-	Video    *Video          `json:"video"`
+	Story     *Story          `json:"story"`
+	Reaction  *ReactionUpdate `json:"reaction"`
+	Voice     *Voice          `json:"voice"`
+	Audio     *Audio          `json:"audio"`
+	Animation *Animation      `json:"animation"`
+	Sticker   *Sticker        `json:"sticker"`
+	Document  *Document       `json:"document"`
+	Photo     []PhotoSize     `json:"photo"`
+	Video     *Video          `json:"video"`
+	Caption   string          `json:"caption"`
 
 	ReplyToMessage *struct {
 		MessageID int `json:"message_id"`
@@ -1825,13 +1830,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// 🆕 معالجة الرسالة الصوتية
-		if msg.Voice != nil && config.ReplyToVoice {
-			handleVoiceMessage(botToken, adminID, config, customerChatID, senderID, customerName, msg)
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
 		// الرد على كلمة "تفعيل"
 		if strings.TrimSpace(msg.Text) == "تفعيل" {
 			sendNerdBotInfoBusiness(botToken, customerChatID, msg.BusinessConnectionID)
@@ -1839,9 +1837,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// الرد الذكي التلقائي يعمل في المحادثات الخاصة فقط، دون معاينة أو موافقة.
-		if config.SmartReplyEnabled && msg.Chat.Type == "private" && strings.TrimSpace(msg.Text) != "" {
-			suggestedReply, aiErr := generateSmartReply(msg.Text)
+		// الرد الذكي يعالج النصوص والوسائط المدعومة قبل مسار الرد الصوتي التقليدي.
+		if config.SmartReplyEnabled && msg.Chat.Type == "private" && hasSmartReplyPayload(msg) {
+			userContent, contentErr := buildSmartReplyInput(botToken, msg)
+			if contentErr != nil {
+				log.Printf("تعذر تجهيز رسالة ذكية للمحادثة %d: %v", customerChatID, contentErr)
+				sendMessage(botToken, adminID, fmt.Sprintf("⚠️ وصلت رسالة العميل لكن تعذر تحليل محتواها؛ لم يتم إرسال رد تلقائي.\nالسبب: %s", contentErr))
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			suggestedReply, aiErr := generateSmartReplyWithContent(userContent)
 			if aiErr != nil {
 				log.Printf("تعذر إنشاء رد ذكي للمحادثة %d: %v", customerChatID, aiErr)
 				sendMessage(botToken, adminID, fmt.Sprintf("⚠️ تعذر إنشاء الرد الذكي؛ لم يتم إرسال رد للعميل.\nالسبب: %s", aiErr))
@@ -1854,6 +1859,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				log.Printf("فشل إرسال الرد الذكي للمحادثة %d: %v", customerChatID, err)
 				sendMessage(botToken, adminID, "⚠️ تم إنشاء الرد الذكي لكن تعذر إرساله للعميل.")
 			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// المسار التقليدي للردود الصوتية يبقى متاحاً عند إيقاف الرد الذكي.
+		if msg.Voice != nil && config.ReplyToVoice {
+			handleVoiceMessage(botToken, adminID, config, customerChatID, senderID, customerName, msg)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
