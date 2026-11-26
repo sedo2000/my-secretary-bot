@@ -1,16 +1,16 @@
 package handler
 
 import (
-	"bytes"\n\t"encoding/base64"\n\t"path/filepath"\n\t"unicode/utf8"
-	"encoding/json"
+	"bytes"
+	"encoding/base64"\n\t"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
+	"os"\n\t"path/filepath"
 	"strings"
-	"time"
+	"time"\n\t"unicode/utf8"
 )
 
 const (
@@ -219,7 +219,9 @@ func generateSmartReplyWithContent(customerContent interface{}) (string, error) 
 	if len(result.Choices) == 0 {
 		return "", fmt.Errorf("لم يُرجع نموذج الذكاء الاصطناعي أي اقتراح")
 	}
-	reply := strings.TrimSpace(result.Choices[0].Message.Content)
+	replyText, ok := result.Choices[0].Message.Content.(string)
+	if !ok { return "", fmt.Errorf("استجابة النموذج ليست نصاً") }
+	reply := strings.TrimSpace(replyText)
 	if reply == "" {
 		return "", fmt.Errorf("عاد اقتراح الذكاء الاصطناعي فارغاً")
 	}
