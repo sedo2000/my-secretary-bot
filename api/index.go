@@ -769,7 +769,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if update.CallbackQuery != nil {
 		cb := update.CallbackQuery
 		log.Printf("استلام callback: data=%q from=%d chat=%d", cb.Data, cb.From.ID, cb.Message.Chat.ID)
-		answerCallback(botToken, cb.ID)
+		if cb.Data != "customer_smart_reply_toggle" {
+			answerCallback(botToken, cb.ID)
+		}
 		if cb.Message.Chat.ID == 0 || cb.Message.MessageID == 0 {
 			w.WriteHeader(http.StatusOK)
 			return
