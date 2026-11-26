@@ -422,6 +422,7 @@ type BotConfig struct {
 	VoiceReply          string `json:"voice_reply"`
 	PendingReplyPreview        string `json:"pending_reply_preview,omitempty"`
 	SmartReplyEnabled          bool   `json:"smart_reply_enabled,omitempty"`
+	SmartReplyChatOverrides   map[int64]bool `json:"smart_reply_chat_overrides,omitempty"`
 	PendingSmartReply          string `json:"pending_smart_reply,omitempty"`
 	PendingSmartChatID         int64  `json:"pending_smart_chat_id,omitempty"`
 	PendingSmartBusinessConnID string `json:"pending_smart_business_conn_id,omitempty"`
@@ -600,6 +601,7 @@ type UsersSharedData struct {
 
 type Message struct {
 	MessageID int `json:"message_id"`
+	BusinessConnectionID string `json:"business_connection_id,omitempty"`
 	Chat      struct {
 		ID   int64  `json:"id"`
 		Type string `json:"type"`
@@ -802,10 +804,24 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if cb.Message.Chat.ID != cb.From.ID {
-			w.WriteHeader(http.StatusOK)
-			return
+		if cb.Data == "customer_smart_reply_toggle" {
+			if cb.Message.Chat.ID != cb.From.ID || cb.Message.BusinessConnectionID == "" { w.WriteHeader(http.StatusOK); return }
+			ownerID := getAdminIDFromBusinessConn(botToken, cb.Message.BusinessConnectionID)
+			if ownerID == 0 { w.WriteHeader(http.StatusOK); return }
+			cfg, cfgMsgID := getConfig(botToken, ownerID)
+			if cfgMsgID < 0 { answerCallbackWithText(botToken, cb.ID, "تعذر حفظ اختيارك الآن. حاول لاحقاً."); w.WriteHeader(http.StatusOK); return }
+			if cfg.SmartReplyChatOverrides == nil { cfg.SmartReplyChatOverrides = make(map[int64]bool) }
+			current := smartReplyEnabledForChat(cfg, cb.Message.Chat.ID)
+			cfg.SmartReplyChatOverrides[cb.Message.Chat.ID] = !current
+			if !saveConfig(botToken, ownerID, cfg, cfgMsgID) { answerCallbackWithText(botToken, cb.ID, "تعذر حفظ اختيارك. لم تتغير الحالة."); w.WriteHeader(http.StatusOK); return }
+			newState := !current
+			controlText, keyboard := customerSmartReplyControl(newState)
+			_, editErr := callBusinessAPI(botToken, "editMessageText", map[string]interface{}{"chat_id":cb.Message.Chat.ID,"message_id":cb.Message.MessageID,"business_connection_id":cb.Message.BusinessConnectionID,"text":controlText,"reply_markup":keyboard})
+			if editErr != nil { log.Printf("تم حفظ حالة الرد الذكي للعميل %d لكن تعذر تحديث زر التحكم: %v", cb.Message.Chat.ID, editErr) }
+			answerCallbackWithText(botToken, cb.ID, map[bool]string{true:"تم تشغيل الرد الذكي في هذه المحادثة.",false:"تم إيقاف الرد الذكي في هذه المحادثة."}[newState])
+			w.WriteHeader(http.StatusOK); return
 		}
+		if cb.Message.Chat.ID != cb.From.ID { w.WriteHeader(http.StatusOK); return }
 		adminID := cb.From.ID
 		config, msgID := getConfig(botToken, adminID)
 		if msgID < 0 {
@@ -1812,9 +1828,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		customerName := msg.From.FirstName
-		if customerName == "" {
-			customerName = "صديقي"
-		}
+		if customerName == "" { customerName = "صديقي" }
+		customerSmartEnabled := smartReplyEnabledForChat(config, customerChatID)
+		sendCustomerSmartReplyControl(botToken, customerChatID, msg.BusinessConnectionID, customerSmartEnabled)
 
 		// 🆕 معالجة الرد على الستوري (Story Mention)
 		if msg.Story != nil && config.ReplyToStoryMention {
@@ -1838,7 +1854,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// الرد الذكي يعالج النصوص والوسائط المدعومة قبل مسار الرد الصوتي التقليدي.
-		if config.SmartReplyEnabled && msg.Chat.Type == "private" && hasSmartReplyPayload(msg) {
+		if customerSmartEnabled && msg.Chat.Type == "private" && hasSmartReplyPayload(msg) {
 			userContent, contentErr := buildSmartReplyInput(botToken, msg)
 			if contentErr != nil {
 				log.Printf("تعذر تجهيز رسالة ذكية للمحادثة %d: %v", customerChatID, contentErr)
@@ -2306,6 +2322,31 @@ func saveConfig(token string, chatID int64, cfg BotConfig, pinnedMsgID int) bool
 }
 
 // ============== إرسال الرسائل والقوائم ==============
+
+
+func smartReplyEnabledForChat(cfg BotConfig, chatID int64) bool {
+	if enabled, exists := cfg.SmartReplyChatOverrides[chatID]; exists { return enabled }
+	return cfg.SmartReplyEnabled
+}
+
+func customerSmartReplyControl(enabled bool) (string, map[string]interface{}) {
+	buttonText, stateText, style := "🛑 إيقاف الرد الذكي", "🟢 الرد الذكي مفعّل في هذه المحادثة.", "danger"
+	if !enabled { buttonText, stateText, style = "🟢 تشغيل الرد الذكي", "🔴 الرد الذكي متوقف في هذه المحادثة.", "success" }
+	keyboard := map[string]interface{}{"inline_keyboard":[][]map[string]interface{}{{{"text":buttonText,"callback_data":"customer_smart_reply_toggle","style":style}}}}
+	return stateText+"\nيمكنك تغيير هذا الإعداد في أي وقت.", keyboard
+}
+
+func sendCustomerSmartReplyControl(token string, chatID int64, businessConnectionID string, enabled bool) {
+	text, keyboard := customerSmartReplyControl(enabled)
+	if _, err := callBusinessAPI(token,"sendMessage",map[string]interface{}{"chat_id":chatID,"business_connection_id":businessConnectionID,"text":text,"reply_markup":keyboard}); err != nil {
+		log.Printf("تعذر إرسال زر التحكم بالرد الذكي للعميل %d: %v",chatID,err)
+	}
+}
+
+func answerCallbackWithText(token, callbackID, answer string) {
+	if callbackID == "" { return }
+	if _,err:=postTelegramJSON(token,"answerCallbackQuery",map[string]interface{}{"callback_query_id":callbackID,"text":answer});err!=nil{log.Printf("تعذر إظهار نتيجة زر العميل: %v",err)}
+}
 
 func sendNerdBotInfo(token string, chatID int64) {
 	payload := map[string]interface{}{
