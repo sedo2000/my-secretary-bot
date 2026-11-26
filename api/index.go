@@ -871,8 +871,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				prefs.PausedUntil = 0
 				message = "تم استئناف الرد الذكي."
 			case "customer_human":
-				message = "تم إرسال طلبك إلى صاحب الحساب."
-				sendMessage(botToken, ownerID, fmt.Sprintf("🙋 طلب العميل التحدث معك.\nمعرّف المحادثة: %d\nاسم العميل: %s", customerID, cb.From.FirstName))
+				prefs.PausedUntil = time.Now().Unix() + 24*3600
+				message = "تم إرسال طلبك إلى صاحب الحساب، وأوقفنا الرد الآلي مؤقتاً حتى يتابعك."
+				sendMessage(botToken, ownerID, fmt.Sprintf("🙋 طلب العميل التحدث معك. تم إيقاف الرد الذكي مؤقتاً لمدة 24 ساعة.\nمعرّف المحادثة: %d\nاسم العميل: %s", customerID, cb.From.FirstName))
 			case "customer_report":
 				message = "تم إرسال بلاغك إلى صاحب الحساب."
 				sendMessage(botToken, ownerID, fmt.Sprintf("🚩 أبلغ العميل عن رد غير مناسب.\nمعرّف المحادثة: %d\nيرجى مراجعة المحادثة.", customerID))
@@ -1963,8 +1964,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// عند الإيقاف المؤقت لا نسمح لمسار الرد التقليدي بتجاوز اختيار العميل.
+		if customerSmartEnabled && customerPaused {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
 		// الرد الذكي يعالج النصوص والوسائط المدعومة قبل مسار الرد الصوتي التقليدي.
-		if customerSmartEnabled && !customerPaused && msg.Chat.Type == "private" && hasSmartReplyPayload(msg) {
+		if customerSmartEnabled && msg.Chat.Type == "private" && hasSmartReplyPayload(msg) {
 			userContent, contentErr := buildSmartReplyInput(botToken, msg)
 			if contentErr != nil {
 				log.Printf("تعذر تجهيز رسالة ذكية للمحادثة %d: %v", customerChatID, contentErr)
@@ -2464,7 +2471,8 @@ func customerPreferencesPanel(p CustomerPreferences) (string, map[string]interfa
 		{{"text":"⏸️ ساعة","callback_data":"customer_pause_1"},{"text":"⏸️ 3 ساعات","callback_data":"customer_pause_3"},{"text":"⏸️ 24 ساعة","callback_data":"customer_pause_24"}},
 		{{"text":"▶️ استئناف الرد","callback_data":"customer_resume"}},
 		{{"text":"👤 التحدث مع صاحب الحساب","callback_data":"customer_human"}},
-		{{"text":"⭐ تقييم المساعد","callback_data":"customer_rate_5"},{"text":"🚩 الإبلاغ عن رد","callback_data":"customer_report"}},
+		{{"text":"⭐1","callback_data":"customer_rate_1"},{"text":"⭐2","callback_data":"customer_rate_2"},{"text":"⭐3","callback_data":"customer_rate_3"},{"text":"⭐4","callback_data":"customer_rate_4"},{"text":"⭐5","callback_data":"customer_rate_5"}},
+		{{"text":"🚩 الإبلاغ عن رد غير مناسب","callback_data":"customer_report"}},
 	}}
 	return text, keyboard
 }
