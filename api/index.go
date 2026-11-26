@@ -779,9 +779,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if update.CallbackQuery != nil {
 		cb := update.CallbackQuery
 		log.Printf("استلام callback: data=%q from=%d chat=%d", cb.Data, cb.From.ID, cb.Message.Chat.ID)
-		if !strings.HasPrefix(cb.Data, "customer_") {
-			answerCallback(botToken, cb.ID)
-		}
+		// أجب عن callback فوراً قبل أي طلبات Telegram/تحميل إعدادات قد تستغرق وقتاً.
+		// لا نؤخر إيقاف مؤشر التحميل حتى نهاية عمليات الحفظ.
+		answerCallback(botToken, cb.ID)
 		if cb.Message.Chat.ID == 0 || cb.Message.MessageID == 0 {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -818,19 +818,19 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		if strings.HasPrefix(cb.Data, "customer_") && cb.Data != "customer_smart_reply_toggle" {
 			if cb.Message.Chat.ID != cb.From.ID || cb.Message.BusinessConnectionID == "" {
-				answerCallbackWithText(botToken, cb.ID, "هذا الخيار متاح من محادثتك مع الحساب فقط.")
+				sendCustomerCallbackNotice(botToken, cb.Message.Chat.ID, cb.Message.BusinessConnectionID, "هذا الخيار متاح من محادثتك مع الحساب فقط.")
 				w.WriteHeader(http.StatusOK)
 				return
 			}
 			ownerID := getAdminIDFromBusinessConn(botToken, cb.Message.BusinessConnectionID)
 			if ownerID == 0 {
-				answerCallbackWithText(botToken, cb.ID, "تعذر تحديد صاحب الحساب حالياً.")
+				sendCustomerCallbackNotice(botToken, cb.Message.Chat.ID, cb.Message.BusinessConnectionID, "تعذر تحديد صاحب الحساب حالياً.")
 				w.WriteHeader(http.StatusOK)
 				return
 			}
 			cfg, cfgMsgID := getConfig(botToken, ownerID)
 			if cfgMsgID < 0 {
-				answerCallbackWithText(botToken, cb.ID, "تعذر قراءة الإعدادات. حاول لاحقاً.")
+				sendCustomerCallbackNotice(botToken, cb.Message.Chat.ID, cb.Message.BusinessConnectionID, "تعذر قراءة الإعدادات. حاول لاحقاً.")
 				w.WriteHeader(http.StatusOK)
 				return
 			}
@@ -883,17 +883,17 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 				message = "شكراً لتقييمك!"
 				sendMessage(botToken, ownerID, fmt.Sprintf("⭐ تقييم العميل للمساعد: %s/5\nمعرّف المحادثة: %d", rating, customerID))
 			default:
-				answerCallbackWithText(botToken, cb.ID, "هذا الخيار غير متاح حالياً.")
+				sendCustomerCallbackNotice(botToken, cb.Message.Chat.ID, cb.Message.BusinessConnectionID, "هذا الخيار غير متاح حالياً.")
 				w.WriteHeader(http.StatusOK)
 				return
 			}
 			cfg.CustomerPreferences[customerID] = prefs
 			if !saveConfig(botToken, ownerID, cfg, cfgMsgID) {
-				answerCallbackWithText(botToken, cb.ID, "تعذر حفظ الإعداد. لم يتم تطبيق التغيير.")
+				sendCustomerCallbackNotice(botToken, cb.Message.Chat.ID, cb.Message.BusinessConnectionID, "تعذر حفظ الإعداد. لم يتم تطبيق التغيير.")
 				w.WriteHeader(http.StatusOK)
 				return
 			}
-			answerCallbackWithText(botToken, cb.ID, message)
+			sendCustomerCallbackNotice(botToken, customerID, cb.Message.BusinessConnectionID, message)
 			panelText, panelKeyboard := customerPreferencesPanel(prefs)
 			if cb.Data == "customer_panel" || strings.HasPrefix(cb.Data, "customer_lang_") || strings.HasPrefix(cb.Data, "customer_tone_") || cb.Data == "customer_safe_toggle" || strings.HasPrefix(cb.Data, "customer_pause_") || cb.Data == "customer_resume" {
 				_ = callBusinessAPI(botToken, "sendMessage", map[string]interface{}{"chat_id": customerID, "business_connection_id": cb.Message.BusinessConnectionID, "text": panelText, "reply_markup": panelKeyboard})
@@ -906,16 +906,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			ownerID := getAdminIDFromBusinessConn(botToken, cb.Message.BusinessConnectionID)
 			if ownerID == 0 { w.WriteHeader(http.StatusOK); return }
 			cfg, cfgMsgID := getConfig(botToken, ownerID)
-			if cfgMsgID < 0 { answerCallbackWithText(botToken, cb.ID, "تعذر حفظ اختيارك الآن. حاول لاحقاً."); w.WriteHeader(http.StatusOK); return }
+			if cfgMsgID < 0 { sendCustomerCallbackNotice(botToken, cb.Message.Chat.ID, cb.Message.BusinessConnectionID, "تعذر حفظ اختيارك الآن. حاول لاحقاً."); w.WriteHeader(http.StatusOK); return }
 			if cfg.SmartReplyChatOverrides == nil { cfg.SmartReplyChatOverrides = make(map[int64]bool) }
 			current := smartReplyEnabledForChat(cfg, cb.Message.Chat.ID)
 			cfg.SmartReplyChatOverrides[cb.Message.Chat.ID] = !current
-			if !saveConfig(botToken, ownerID, cfg, cfgMsgID) { answerCallbackWithText(botToken, cb.ID, "تعذر حفظ اختيارك. لم تتغير الحالة."); w.WriteHeader(http.StatusOK); return }
+			if !saveConfig(botToken, ownerID, cfg, cfgMsgID) { sendCustomerCallbackNotice(botToken, cb.Message.Chat.ID, cb.Message.BusinessConnectionID, "تعذر حفظ اختيارك. لم تتغير الحالة."); w.WriteHeader(http.StatusOK); return }
 			newState := !current
 			controlText, keyboard := customerSmartReplyControl(newState)
 			editErr := callBusinessAPI(botToken, "editMessageText", map[string]interface{}{"chat_id":cb.Message.Chat.ID,"message_id":cb.Message.MessageID,"business_connection_id":cb.Message.BusinessConnectionID,"text":controlText,"reply_markup":keyboard})
 			if editErr != nil { log.Printf("تم حفظ حالة الرد الذكي للعميل %d لكن تعذر تحديث زر التحكم: %v", cb.Message.Chat.ID, editErr) }
-			answerCallbackWithText(botToken, cb.ID, map[bool]string{true:"تم تشغيل الرد الذكي في هذه المحادثة.",false:"تم إيقاف الرد الذكي في هذه المحادثة."}[newState])
+			sendCustomerCallbackNotice(botToken, cb.Message.Chat.ID, cb.Message.BusinessConnectionID, map[bool]string{true:"تم تشغيل الرد الذكي في هذه المحادثة.",false:"تم إيقاف الرد الذكي في هذه المحادثة."}[newState])
 			w.WriteHeader(http.StatusOK); return
 		}
 		if cb.Message.Chat.ID != cb.From.ID { w.WriteHeader(http.StatusOK); return }
@@ -2485,6 +2485,16 @@ func sendCustomerSmartReplyControl(token string, chatID int64, businessConnectio
 		return false
 	}
 	return true
+}
+
+func sendCustomerCallbackNotice(token string, chatID int64, businessConnectionID, notice string) {
+	payload := map[string]interface{}{"chat_id": chatID, "text": notice}
+	if strings.TrimSpace(businessConnectionID) != "" {
+		payload["business_connection_id"] = businessConnectionID
+	}
+	if err := callBusinessAPI(token, "sendMessage", payload); err != nil {
+		log.Printf("تعذر إرسال نتيجة زر العميل %d: %v", chatID, err)
+	}
 }
 
 func answerCallbackWithText(token, callbackID, answer string) {
